@@ -160,10 +160,15 @@ def setup_env_config(
     env_cfg.observations.policy.concatenate_terms = False
 
     # Setup recorders
+    print(f"[DEBUG] args_cli.enable_cameras: {args_cli.enable_cameras}")
     if args_cli.enable_cameras:
+        print("[DEBUG] Setting up ArenaEnvRecorderManagerCfg (Cameras Enabled)")
         env_cfg.recorders = ArenaEnvRecorderManagerCfg()
     else:
+        print("[DEBUG] Setting up ActionStateRecorderManagerCfg (Cameras Disabled)")
         env_cfg.recorders = ActionStateRecorderManagerCfg()
+    
+    print(f"[DEBUG] Recorders Config Type: {type(env_cfg.recorders)}")
     env_cfg.recorders.dataset_export_dir_path = output_dir
     env_cfg.recorders.dataset_filename = output_file_name
 
@@ -211,6 +216,8 @@ def main():
 
     # reset before starting
     env.reset()
+    if args_cli.enable_cameras:
+        print(f"[DEBUG] Env obs_buf keys: {list(env.obs_buf.keys())}")
 
     # Setup and run async data generation
     async_components = setup_async_generation(

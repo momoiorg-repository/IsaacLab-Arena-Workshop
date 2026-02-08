@@ -20,6 +20,7 @@ from isaaclab_arena_environments.gr1_turn_stand_mixer_knob_environment import Gr
 from isaaclab_arena_environments.kitchen_pick_and_place_environment import KitchenPickAndPlaceEnvironment
 from isaaclab_arena_environments.lift_object_environment import LiftObjectEnvironment
 from isaaclab_arena_environments.press_button_environment import PressButtonEnvironment
+from isaaclab_arena_environments.table_pick_and_place_environment import TablePickAndPlaceEnvironment
 from isaaclab_arena_environments.tabletop_place_upright_environment import TableTopPlaceUprightEnvironment
 
 # NOTE(alexmillane, 2025.09.04): There is an issue with type annotation in this file.
@@ -42,6 +43,7 @@ ExampleEnvironments = {
     LiftObjectEnvironment.name: LiftObjectEnvironment,
     TableTopPlaceUprightEnvironment.name: TableTopPlaceUprightEnvironment,
     Gr1TurnStandMixerKnobEnvironment.name: Gr1TurnStandMixerKnobEnvironment,
+    TablePickAndPlaceEnvironment.name: TablePickAndPlaceEnvironment,
 }
 
 
