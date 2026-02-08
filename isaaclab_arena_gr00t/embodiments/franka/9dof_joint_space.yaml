@@ -1,0 +1,12 @@
+joints:
+  "panda_joint1": 0
+  "panda_joint2": 1
+  "panda_joint3": 2
+  "panda_joint4": 3
+  "panda_joint5": 4
+  "panda_joint6": 5
+  "panda_joint7": 6
+  "panda_finger_joint1": 7
+  "panda_finger_joint2": 8
+
+total_joints: 9

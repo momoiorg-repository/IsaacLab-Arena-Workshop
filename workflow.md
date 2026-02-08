@@ -65,3 +65,13 @@ python -m torch.distributed.run --nproc_per_node=1 --standalone submodules/Isaac
     --global-batch-size 8 \
     --gradient-accumulation-steps 4 \
     --dataloader-num-workers 2
+
+# 5. Push Code for BREV Training
+
+Since you have authenticated via SSH using `gh auth login`, use the following command to push:
+
+```bash
+git push -u workshop feature/franka_training
+```
+
+Note: The remote URL has been updated to use SSH (`git@github.com:...`) instead of HTTPS to leverage your authenticated keys.

@@ -8,11 +8,11 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 WORKDIR="/workspaces/isaaclab_arena"
 
 # Default mount directory on the host machine for the datasets
-DATASETS_HOST_MOUNT_DIRECTORY="$HOME/datasets"
+DATASETS_HOST_MOUNT_DIRECTORY="$HOME/IsaacLab-Arena/datasets"
 # Default mount directory on the host machine for the models
-MODELS_HOST_MOUNT_DIRECTORY="$HOME/models"
+MODELS_HOST_MOUNT_DIRECTORY="$HOME/IsaacLab-Arena/models"
 # Default mount directory on the host machine for the evaluation directory
-EVAL_HOST_MOUNT_DIRECTORY="$HOME/eval"
+EVAL_HOST_MOUNT_DIRECTORY="$HOME/IsaacLab-Arena/eval"
 # Default GR00T installation settings (false means no GR00T installation)
 INSTALL_GROOT="false"
 # Whether to forcefully rebuild the docker image
@@ -169,7 +169,8 @@ else
         DOCKER_RUN_ARGS+=("-v" "./submodules/Isaac-GR00T:${WORKDIR}/submodules/Isaac-GR00T")
     fi
     # Allow X11 connections
-    xhost +local:docker > /dev/null
+    # MEMO: Commentout for Cloud environment
+    # xhost +local:docker > /dev/null
 
     docker run "${DOCKER_RUN_ARGS[@]}" --interactive --rm --tty ${DOCKER_IMAGE_NAME}:${DOCKER_VERSION_TAG} "${@}"
 fi

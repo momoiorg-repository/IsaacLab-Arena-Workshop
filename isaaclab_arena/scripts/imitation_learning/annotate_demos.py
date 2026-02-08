@@ -73,8 +73,8 @@ import isaaclab_mimic.envs  # noqa: F401
 if args_cli.enable_pinocchio:
     import isaaclab_mimic.envs.pinocchio_envs  # noqa: F401
 
-# Only enables inputs if this script is NOT headless mode
-if not args_cli.headless and not os.environ.get("HEADLESS", 0):
+# Only enables inputs if this script is NOT headless mode or if LIVESTREAM is enabled
+if (not args_cli.headless and not os.environ.get("HEADLESS", 0)) or os.environ.get("LIVESTREAM"):
     from isaaclab.devices import Se3Keyboard, Se3KeyboardCfg
 
 import isaaclab_tasks  # noqa: F401
@@ -148,12 +148,28 @@ class PreStepSubtaskTermsObservationsRecorderCfg(RecorderTermCfg):
     class_type: type[RecorderTerm] = PreStepSubtaskTermsObservationsRecorder
 
 
+class PreStepCameraObservationsRecorder(RecorderTerm):
+    """Recorder term that records the camera observations in each step."""
+
+    def record_pre_step(self):
+        return "obs", self._env.obs_buf["camera_obs"]
+
+
+@configclass
+class PreStepCameraObservationsRecorderCfg(RecorderTermCfg):
+    """Configuration for the camera observations recorder term."""
+
+    class_type: type[RecorderTerm] = PreStepCameraObservationsRecorder
+
+
 @configclass
 class MimicRecorderManagerCfg(ActionStateRecorderManagerCfg):
     """Mimic specific recorder terms."""
 
     record_pre_step_datagen_info = PreStepDatagenInfoRecorderCfg()
     record_pre_step_subtask_term_signals = PreStepSubtaskTermsObservationsRecorderCfg()
+    record_pre_step_camera_observations = PreStepCameraObservationsRecorderCfg()
+
 
 
 def main():
@@ -230,8 +246,8 @@ def main():
     # reset environment
     env.reset()
 
-    # Only enables inputs if this script is NOT headless mode
-    if not args_cli.headless and not os.environ.get("HEADLESS", 0):
+    # Only enables inputs if this script is NOT headless mode or if LIVESTREAM is enabled
+    if (not args_cli.headless and not os.environ.get("HEADLESS", 0)) or os.environ.get("LIVESTREAM"):
         keyboard_interface = Se3Keyboard(Se3KeyboardCfg(pos_sensitivity=0.1, rot_sensitivity=0.1))
         keyboard_interface.add_callback("N", play_cb)
         keyboard_interface.add_callback("B", pause_cb)
