@@ -111,6 +111,10 @@ class Gr00tDatasetConfig:
     robot_type: str = field(
         default="null", metadata={"description": "Type of robot embodiment used in the policy fine-tuning."}
     )
+    policy_action_joints_config_path: Path = field(
+        default=None,
+        metadata={"description": "Path to the YAML file specifying the joint ordering configuration for policy action space in dataset."},
+    )
     # robot simulation specific parameters
     action_joints_config_path: Path = field(
         default=Path(__file__).parent.resolve() / "g1" / "43dof_joint_space.yaml",
