@@ -74,6 +74,7 @@ TAGS
 
 # Datasets
 *datasets/
+*output/
 
 # Training logs and outputs
 *wandb/
