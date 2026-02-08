@@ -199,8 +199,17 @@ def get_feature_info(
         # State & action
         if column in [config.lerobot_keys["state"], config.lerobot_keys["action"]]:
             dof = column_data.shape[1]
-            assert dof == len(policy_joints_names)
-            features[column]["names"] = [f"{policy_joints_names[i]}" for i in range(dof)]
+            
+            target_joints_names = policy_joints_names
+            if column == config.lerobot_keys["action"] and config.policy_action_joints_config_path is not None:
+                 action_joints_config = load_robot_joints_config_from_yaml(config.policy_action_joints_config_path)
+                 target_joints_names = []
+                 for joint_group in action_joints_config.keys():
+                    for joint_name in action_joints_config[joint_group]:
+                        target_joints_names.append(joint_name)
+
+            assert dof == len(target_joints_names), f"{column} dof {dof} != {len(target_joints_names)}"
+            features[column]["names"] = [f"{target_joints_names[i]}" for i in range(dof)]
 
     return features
 
@@ -360,7 +369,12 @@ def convert_trajectory_to_df(
 
         # 1.1. Remap the joints from Lab order to the LeRobot-GR00T order
         joints = JointsAbsPosition.from_array(joints, input_joints_config, device="cpu")
-        remapped_joints = remap_sim_joints_to_policy_joints(joints, policy_joints_config)
+        
+        current_policy_config = policy_joints_config
+        if key == "action" and config.policy_action_joints_config_path is not None:
+             current_policy_config = load_robot_joints_config_from_yaml(config.policy_action_joints_config_path)
+
+        remapped_joints = remap_sim_joints_to_policy_joints(joints, current_policy_config)
 
         # 1.2. Fill in the missing joints with zeros
         ordered_joints = []
@@ -506,6 +520,8 @@ def convert_hdf5_to_lerobot(config: Gr00tDatasetConfig):
                 trajectory=trajectory, episode_index=episode_index, index_start=total_length, config=config
             )
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             print(f"Error loading trajectory {trajectory_id}: {e}")
             continue
 
@@ -594,8 +610,10 @@ def convert_hdf5_to_lerobot(config: Gr00tDatasetConfig):
             if worker.is_alive():
                 worker.terminate()
                 worker.join()
-        if not hdf5_handler.closed:
+        try:
             hdf5_handler.close()
+        except Exception:
+            pass
         raise  # Re-raise the exception after cleanup
 
 
