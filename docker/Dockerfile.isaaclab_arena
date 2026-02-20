@@ -11,8 +11,8 @@ WORKDIR "${WORKDIR}"
 
 # Hide conflicting Vulkan files, if needed.
 RUN if [ -e "/usr/share/vulkan" ] && [ -e "/etc/vulkan" ]; then \
-      mv /usr/share/vulkan /usr/share/vulkan_hidden; \
-    fi
+  mv /usr/share/vulkan /usr/share/vulkan_hidden; \
+  fi
 
 # Install apt packages
 RUN apt-get update && apt-get install -y \
@@ -40,6 +40,8 @@ RUN ln -s /isaac-sim/ ${WORKDIR}/submodules/IsaacLab/_isaac_sim
 RUN for DIR in ${WORKDIR}/submodules/IsaacLab/source/isaaclab*/; do pip install --no-deps -e "$DIR"; done
 # Logs and other stuff appear under dist-packages per default, so this dir has to be writeable.
 RUN chmod 777 -R /isaac-sim/kit/
+# Debug for setuptools version
+RUN /isaac-sim/python.sh -m pip install --no-build-isolation flatdict==4.0.1
 # Install isaaclab
 RUN ${ISAACLAB_PATH}/isaaclab.sh -i
 
@@ -47,12 +49,12 @@ RUN ${ISAACLAB_PATH}/isaaclab.sh -i
 # TODO(alexmillane): Watch the thread here: https://nvidia.slack.com/archives/C06HLQ6CB41/p1764680205807019
 #                    and remove this thread when IsaacLab has a fix.
 RUN if python -c "import qpsolvers; print(qpsolvers.available_solvers)" | grep -q "osqp"; then \
-        echo "OSQP is installed. You can remove this clause from the Arena dockerfile."; \
-    else \
-        echo "OSQP missing, installing... This is a patch for an Isaac Lab bug."; \
-        /isaac-sim/python.sh -m pip install --upgrade pip; \
-        /isaac-sim/python.sh -m pip install qpsolvers==4.8.1; \
-    fi
+  echo "OSQP is installed. You can remove this clause from the Arena dockerfile."; \
+  else \
+  echo "OSQP missing, installing... This is a patch for an Isaac Lab bug."; \
+  /isaac-sim/python.sh -m pip install --upgrade pip; \
+  /isaac-sim/python.sh -m pip install qpsolvers==4.8.1; \
+  fi
 
 # Install pip dependencies
 # NOTE(alexmillane, 2025-07-22): Dependencies are installed in the IsaacSim version of python.
@@ -88,9 +90,9 @@ COPY docker/setup/install_cuda.sh /tmp/install_cuda.sh
 RUN chmod +x /tmp/install_cuda.sh
 # If GR00T deps to be installed, install cuda 12.8 (needed for flash-attn, and avoid 4G memory addon)
 RUN if [ "$INSTALL_GROOT" = "true" ]; then \
-    /tmp/install_cuda.sh; \
+  /tmp/install_cuda.sh; \
   else \
-    echo "Skipping CUDA 12.8 installation"; \
+  echo "Skipping CUDA 12.8 installation"; \
   fi && \
   rm -f /tmp/install_cuda.sh
 # Copy GR00T
@@ -100,9 +102,9 @@ COPY docker/setup/install_gr00t_deps.sh /tmp/install_gr00t_deps.sh
 RUN chmod +x /tmp/install_gr00t_deps.sh
 # Install GR00T dependencies if requested
 RUN if [ "$INSTALL_GROOT" = "true" ]; then \
-    /tmp/install_gr00t_deps.sh; \
+  /tmp/install_gr00t_deps.sh; \
   else \
-    echo "Skipping GR00T installation"; \
+  echo "Skipping GR00T installation"; \
   fi && \
   # Clean up installation scripts
   rm -f /tmp/install_gr00t_deps.sh

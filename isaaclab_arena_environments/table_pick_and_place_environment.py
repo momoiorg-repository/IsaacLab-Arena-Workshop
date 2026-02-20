@@ -48,7 +48,7 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
         # Placing object on the white table in Galileo room
         pick_up_object.set_initial_pose(
             Pose(
-                position_xyz=(0.55, 0.0, 0.33),
+                position_xyz=(0.55, 0.0, 0.30),
                 rotation_wxyz=(1.0, 0.0, 0.0, 0.0),
             )
         )

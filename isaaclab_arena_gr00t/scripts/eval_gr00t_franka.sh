@@ -5,8 +5,8 @@ set -e
 export PYTHONPATH=$PYTHONPATH:$(pwd)/submodules/Isaac-GR00T
 
 # Default variables
-DATASET_PATH="/workspaces/isaaclab_arena/output/table_pick_place_cube_dataset_lerobot"
-CHECKPOINT_DIR="/workspaces/isaaclab_arena/output/gr00t_franka_finetune"
+DATASET_PATH="/workspaces/isaaclab_arena/output/table_pick_place_cube_dataset/lerobot"
+CHECKPOINT_DIR="/models/checkpoint-2000"
 # Find latest checkpoint
 LATEST_CHECKPOINT=$(ls -d $CHECKPOINT_DIR/checkpoint-* 2>/dev/null | sort -V | tail -n 1)
 
