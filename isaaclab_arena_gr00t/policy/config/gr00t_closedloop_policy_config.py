@@ -75,6 +75,10 @@ class Gr00tClosedloopPolicyConfig:
     pov_cam_name_sim: str = field(
         default="robot_head_cam_rgb", metadata={"description": "Name of the POV camera of the robot in simulation."}
     )
+    joint_pos_obs_key: str = field(
+        default="robot_joint_pos",
+        metadata={"description": "Key for joint position in the observation['policy'] dict."},
+    )
     # Closed loop specific parameters
     action_chunk_length: int = field(
         default=16,
@@ -113,5 +117,9 @@ class Gr00tClosedloopPolicyConfig:
             ), "embodiment_tag must be new_embodiment for G1 locomanipulation"
         elif self.task_mode_name == TaskMode.GR1_TABLETOP_MANIPULATION.value:
             assert self.embodiment_tag == "GR1", "embodiment_tag must be GR1 for GR1 tabletop manipulation"
+        elif self.task_mode_name == TaskMode.FRANKA_TABLETOP_MANIPULATION.value:
+            assert (
+                self.embodiment_tag == "NEW_EMBODIMENT"
+            ), "embodiment_tag must be NEW_EMBODIMENT for Franka tabletop manipulation"
         else:
-            raise ValueError(f"Invalid inference mode: {self.task_mode}")
+            raise ValueError(f"Invalid inference mode: {self.task_mode_name}")

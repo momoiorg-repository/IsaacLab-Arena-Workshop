@@ -74,6 +74,12 @@ def remap_policy_joints_to_sim_joints(
             case "waist":
                 # For G1
                 joint_group = "waist"
+            case "panda":
+                # For Franka Panda
+                if "finger" in joint_name:
+                    joint_group = "gripper"
+                else:
+                    joint_group = "single_arm"
             case _:
                 continue
         if joint_name in policy_joints_config[joint_group]:

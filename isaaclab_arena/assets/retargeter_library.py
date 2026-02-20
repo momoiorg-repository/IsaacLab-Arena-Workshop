@@ -72,6 +72,20 @@ class FrankaKeyboardRetargeter(RetargetterBase):
 
 
 @register_retargeter
+class FrankaJointKeyboardRetargeter(RetargetterBase):
+    device = "keyboard"
+    embodiment = "franka_joint"
+
+    def __init__(self):
+        pass
+
+    def get_retargeter_cfg(
+        self, franka_embodiment, sim_device: str, enable_visualization: bool = False
+    ) -> RetargeterCfg | None:
+        return None
+
+
+@register_retargeter
 class FrankaSpaceMouseRetargeter(RetargetterBase):
     device = "spacemouse"
     embodiment = "franka"

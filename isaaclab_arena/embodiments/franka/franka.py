@@ -16,6 +16,7 @@ from isaaclab.assets.articulation.articulation_cfg import ArticulationCfg
 from isaaclab.assets.asset_base_cfg import AssetBaseCfg
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import ManagerBasedRLMimicEnv
+from isaaclab.envs.mdp.actions import JointPositionActionCfg
 from isaaclab.envs.mdp.actions.actions_cfg import BinaryJointPositionActionCfg, DifferentialInverseKinematicsActionCfg
 from isaaclab.managers import ActionTermCfg
 from isaaclab.managers import EventTermCfg as EventTerm
@@ -92,6 +93,32 @@ class FrankaEmbodiment(EmbodimentBase):
         return self.action_config.arm_action.body_name
 
 
+@register_asset
+class FrankaJointEmbodiment(FrankaEmbodiment):
+    """Franka embodiment variant using joint position actions for GR00T closed-loop inference."""
+
+    name = "franka_joint"
+
+    def __init__(
+        self,
+        enable_cameras: bool = False,
+        initial_pose: Pose | None = None,
+        initial_joint_pose: list[float] | None = None,
+        concatenate_observation_terms: bool = False,
+        arm_mode: ArmMode | None = None,
+        camera_offset: Pose | None = _DEFAULT_CAMERA_OFFSET,
+        is_tiled_camera: bool = False,
+    ):
+        super().__init__(
+            enable_cameras, initial_pose, initial_joint_pose,
+            concatenate_observation_terms, arm_mode, camera_offset, is_tiled_camera,
+        )
+        self.action_config = FrankaJointPositionActionsCfg()
+
+    def get_command_body_name(self) -> str:
+        return "panda_hand"
+
+
 @configclass
 class FrankaSceneCfg:
     """Additions to the scene configuration coming from the Franka embodiment."""
@@ -166,6 +193,22 @@ class FrankaActionsCfg:
         joint_names=["panda_finger.*"],
         open_command_expr={"panda_finger_.*": 0.04},
         close_command_expr={"panda_finger_.*": 0.0},
+    )
+
+
+@configclass
+class FrankaJointPositionActionsCfg:
+    """Joint position action config for GR00T closed-loop inference.
+
+    Uses direct joint position control (7 arm joints + 1 gripper finger = 8 DOF)
+    instead of IK-based control.
+    """
+
+    joint_pos = JointPositionActionCfg(
+        asset_name="robot",
+        joint_names=["panda_joint.*", "panda_finger_joint1"],
+        scale=1.0,
+        use_default_offset=False,
     )
 
 

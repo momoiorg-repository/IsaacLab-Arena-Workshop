@@ -225,7 +225,7 @@ class Gr00tClosedloopPolicy(PolicyBase):
                 rgb, target_image_size=self.policy_config.target_image_size, bgr_conversion=False, pad_img=True
             )
         # GR00T uses np arrays, needs to copy torch tensor from gpu to cpu before conversion
-        joint_pos_sim = observation["policy"]["robot_joint_pos"].cpu()
+        joint_pos_sim = observation["policy"][self.policy_config.joint_pos_obs_key].cpu()
         joint_pos_state_sim = JointsAbsPosition(joint_pos_sim, self.robot_state_joints_config)
         # Retrieve joint positions as proprioceptive states and remap to policy joint orders
         joint_pos_state_policy = remap_sim_joints_to_policy_joints(joint_pos_state_sim, self.policy_joints_config)
@@ -332,6 +332,8 @@ class Gr00tClosedloopPolicy(PolicyBase):
                 axis=2,
             )
         elif self.task_mode == TaskMode.GR1_TABLETOP_MANIPULATION:
+            action_tensor = robot_action_sim.get_joints_pos()
+        elif self.task_mode == TaskMode.FRANKA_TABLETOP_MANIPULATION:
             action_tensor = robot_action_sim.get_joints_pos()
         else:
             raise ValueError(f"Unsupported task mode: {self.task_mode}")
