@@ -47,6 +47,18 @@ python isaaclab_arena_gr00t/lerobot/convert_hdf5_to_lerobot.py --yaml_file isaac
 # Evaluate Gr00t (Must be run inside Docker)
 ./docker/run_docker.sh -g "bash isaaclab_arena_gr00t/scripts/eval_gr00t_franka.sh"
 
+# Closed-Loop Inference (Must be run inside Docker)
+./docker/run_docker.sh -g -m ~/VLA-Model
+# Then inside the container:
+python isaaclab_arena/evaluation/policy_runner.py \
+    --policy_type isaaclab_arena_gr00t.policy.gr00t_closedloop_policy.Gr00tClosedloopPolicy \
+    --policy_config_yaml_path isaaclab_arena_gr00t/policy/config/franka_manip_gr00t_closedloop_config.yaml \
+    --enable_cameras \
+    --num_steps 200 \
+    table_pick_and_place \
+    --embodiment franka_joint \
+    --object dex_cube
+
 export DATASET_PATH="/workspaces/isaaclab_arena/output/table_pick_place_cube_dataset"
 export OUTPUT_DIR="/workspaces/isaaclab_arena/output/gr00t_franka_finetune"
 export MODALITY_CONFIG="isaaclab_arena_gr00t/embodiments/franka/franka_modality_config.py"

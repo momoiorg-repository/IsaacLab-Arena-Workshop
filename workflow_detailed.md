@@ -64,6 +64,18 @@ LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/annotate_demos.py 
   --embodiment franka
 ```
 
+```bash
+# Annotate
+LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/annotate_demos.py  --device cpu \
+  --input_file  /workspaces/isaaclab_arena/output/test_demo.hdf5 \
+  --output_file /workspaces/isaaclab_arena/output/test_demo_annotated.hdf5 \
+  --mimic \
+  --enable_cameras \
+  table_pick_and_place \
+  --object dex_cube \
+  --embodiment franka
+```
+
 ### 引数の説明:
 - `--input_file`: 手順1で記録した生のHDF5ファイルを指定します。
 - `--output_file`: アノテーション済みのデータを保存する新しいHDF5ファイルのパスです。
@@ -81,14 +93,14 @@ LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/annotate_demos.py 
 LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/generate_dataset.py \
   --device cpu \
   --enable_cameras \
-  --input_file /workspaces/isaaclab_arena/output/table_pick_place_cube_annotated.hdf5 \
-  --output_file /workspaces/isaaclab_arena/output/table_pick_place_cube_dataset.hdf5 \
+  --input_file /workspaces/isaaclab_arena/output/test_demo_annotated.hdf5 \
+  --output_file /workspaces/isaaclab_arena/output/test_demo_dataset_joint.hdf5 \
   --num_envs 5  \
   --generation_num_trials 20 \
   --mimic \
   table_pick_and_place \
   --object dex_cube \
-  --embodiment franka
+  --embodiment franka_joint
 ```
 
 ### 引数の説明:
@@ -136,7 +148,25 @@ python isaaclab_arena_gr00t/lerobot/convert_hdf5_to_lerobot.py \
 
 ---
 
-## 7. Configuration & Environment Variables
+## 7. Closed loop inference
+
+```bash
+# Closed-Loop Inference (Must be run inside Docker)
+./docker/run_docker.sh -g -m ~/VLA-Model
+# Then inside the container:
+python isaaclab_arena/evaluation/policy_runner.py \
+    --device cpu \
+    --policy_type isaaclab_arena_gr00t.policy.gr00t_closedloop_policy.Gr00tClosedloopPolicy \
+    --policy_config_yaml_path isaaclab_arena_gr00t/policy/config/franka_manip_gr00t_closedloop_config.yaml \
+    --policy_device cuda \
+    --enable_cameras \
+    --num_steps 200 \
+    table_pick_and_place \
+    --embodiment franka_joint \
+    --object dex_cube
+```
+
+## 8. Configuration & Environment Variables
 
 - `export DATASET_DIR="/workspaces/isaaclab_arena/output"`: 出力ファイルのベースディレクトリを設定します。
 - `LIVESTREAM=2`: シミュレーションをリモートで確認するためのストリーミングサーバー（通常ポート4700-4900番台）を有効にします。

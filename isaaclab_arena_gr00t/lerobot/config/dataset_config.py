@@ -52,6 +52,9 @@ class Gr00tDatasetConfig:
     pov_cam_name_sim: str = field(
         default="robot_head_cam", metadata={"description": "Name of the POV camera in the HDF5 file."}
     )
+    front_cam_name_sim: str = field(
+        default=None, metadata={"description": "Name of the front camera in the HDF5 file."}
+    )
     # Gr00t-LeRobot datafield
     state_name_lerobot: str = field(
         default="observation.state", metadata={"description": "Name of the state in the LeRobot file."}
@@ -65,6 +68,9 @@ class Gr00tDatasetConfig:
 
     video_name_lerobot: str = field(
         default="observation.images.ego_view", metadata={"description": "Name of the video in the LeRobot file."}
+    )
+    front_video_name_lerobot: str = field(
+        default=None, metadata={"description": "Name of the front video in the LeRobot file."}
     )
     task_description_lerobot: str = field(
         default="annotation.human.action.task_description",
@@ -181,6 +187,8 @@ class Gr00tDatasetConfig:
             self.hdf5_keys["teleop_torso_orientation_rpy_command"] = self.teleop_torso_orientation_rpy_command_name_sim
         if self.action_eef_name_sim:
             self.hdf5_keys["action_eef_pose"] = self.action_eef_name_sim
+        if self.front_cam_name_sim:
+            self.hdf5_keys["front_cam_rgb"] = self.front_cam_name_sim
 
         # Prepare data keys for LeRobot file
         self.lerobot_keys = {
@@ -189,6 +197,8 @@ class Gr00tDatasetConfig:
             "video": self.video_name_lerobot,
             "annotation": (self.task_description_lerobot,),
         }
+        if self.front_video_name_lerobot:
+            self.lerobot_keys["front_video"] = self.front_video_name_lerobot
         if "left_eef_pos" in self.hdf5_keys:
             self.lerobot_keys["obs_eef_pose"] = "observation.eef_pose"
             self.lerobot_keys["action_eef_pose"] = "action.eef_pose"

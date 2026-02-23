@@ -22,7 +22,7 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
         from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
         from isaaclab_arena.scene.scene import Scene
         from isaaclab_arena.tasks.pick_and_place_task import PickAndPlaceTask
-        from isaaclab_arena.utils.pose import Pose
+        from isaaclab_arena.utils.pose import Pose, PoseRange
         from isaaclab_arena.assets.object_base import ObjectType
         from isaaclab_arena.assets.object_reference import ObjectReference
 
@@ -47,9 +47,9 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
         # Set poses
         # Placing object on the white table in Galileo room
         pick_up_object.set_initial_pose(
-            Pose(
-                position_xyz=(0.55, 0.0, 0.30),
-                rotation_wxyz=(1.0, 0.0, 0.0, 0.0),
+            PoseRange(
+                position_xyz_min=(0.53, -0.05, 0.30),
+                position_xyz_max=(0.57, 0.05, 0.30),
             )
         )
         
@@ -62,6 +62,39 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
         )
 
         scene = Scene(assets=[background, pick_up_object, destination_container, destination_location])
+
+        def add_front_cam(env_cfg):
+            from isaaclab.sensors import CameraCfg
+            import isaaclab.sim as sim_utils
+            from isaaclab.managers import SceneEntityCfg
+            from isaaclab.managers import ObservationTermCfg as ObsTerm
+            from isaaclab.envs import mdp
+
+            if args_cli.enable_cameras:
+                env_cfg.scene.front_cam = CameraCfg(
+                    prim_path="{ENV_REGEX_NS}/front_cam",
+                    update_period=0.0,
+                    height=256,
+                    width=256,
+                    data_types=["rgb"],
+                    spawn=sim_utils.PinholeCameraCfg(
+                        focal_length=2.8, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
+                    ),
+                    offset=CameraCfg.OffsetCfg(
+                        pos=(1.0, 0.0, 1.1), rot=(0.65328, 0.27067, 0.27067, 0.65328), convention="opengl"
+                    )
+                )
+
+                env_cfg.observations.camera_obs.front_cam = ObsTerm(
+                    func=mdp.image,
+                    params={"sensor_cfg": SceneEntityCfg("front_cam"), "data_type": "rgb", "normalize": False},
+                )
+                if not hasattr(env_cfg, "image_obs_list"):
+                    env_cfg.image_obs_list = []
+                env_cfg.image_obs_list.append("front_cam")
+
+            return env_cfg
+
         isaaclab_arena_environment = IsaacLabArenaEnvironment(
             name=self.name,
             embodiment=embodiment,
@@ -73,6 +106,7 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
                 destination_object=destination_container
             ),
             teleop_device=teleop_device,
+            env_cfg_callback=add_front_cam,
         )
         return isaaclab_arena_environment
 

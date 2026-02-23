@@ -213,22 +213,13 @@ class Gr00tClosedloopPolicy(PolicyBase):
         self.task_description = task_description
         return self.task_description
 
-    def get_observations(self, observation: dict[str, Any], camera_name: str = "robot_head_cam_rgb") -> dict[str, Any]:
+    def get_observations(self, observation: dict[str, Any]) -> dict[str, Any]:
         assert "camera_obs" in observation, "camera_obs is not in observation"
-        assert camera_name in observation["camera_obs"], f"camera_name {camera_name} is not in camera_obs"
-        rgb = observation["camera_obs"][camera_name]
-        # gr00t uses numpy arrays
-        rgb = rgb.cpu().numpy()
-        # Apply preprocessing to rgb if size is not the same as the target size
-        if rgb.shape[1:3] != self.policy_config.target_image_size[:2]:
-            rgb = resize_frames_with_padding(
-                rgb, target_image_size=self.policy_config.target_image_size, bgr_conversion=False, pad_img=True
-            )
-        # GR00T uses np arrays, needs to copy torch tensor from gpu to cpu before conversion
-        joint_pos_sim = observation["policy"][self.policy_config.joint_pos_obs_key].cpu()
-        joint_pos_state_sim = JointsAbsPosition(joint_pos_sim, self.robot_state_joints_config)
-        # Retrieve joint positions as proprioceptive states and remap to policy joint orders
-        joint_pos_state_policy = remap_sim_joints_to_policy_joints(joint_pos_state_sim, self.policy_joints_config)
+
+        # Determine simulation camera names based on the policy config
+        sim_video_keys = [self.policy_config.pov_cam_name_sim]
+        if self.policy_config.front_cam_name_sim:
+            sim_video_keys.append(self.policy_config.front_cam_name_sim)
 
         # Pack inputs to dictionary and run the inference
         assert self.task_description is not None, "Task description is not set"
@@ -237,17 +228,38 @@ class Gr00tClosedloopPolicy(PolicyBase):
         # TODO(xinejiayao, 2025-12-10): when multi-task with parallel envs feature is enabled, we need to pass in a list of task descriptions.
         policy_observations = {
             "language": {self.language_keys[0]: [[self.task_description] for _ in range(self.num_envs)]},
-            "video": {
-                self.video_keys[0]: rgb.reshape(
-                    self.num_envs,
-                    1,
-                    self.policy_config.target_image_size[0],
-                    self.policy_config.target_image_size[1],
-                    self.policy_config.target_image_size[2],
-                )
-            },
+            "video": {},
             "state": {},
         }
+
+        # Dynamically load all videos from observation dictionary using config keys
+        for i, video_key in enumerate(self.video_keys):
+            assert i < len(sim_video_keys), f"Not enough simulation cameras configured for model video mode: {video_key}"
+            sim_cam_name = sim_video_keys[i]
+            assert sim_cam_name in observation["camera_obs"], f"camera_name {sim_cam_name} is not in camera_obs. Available keys: {observation['camera_obs'].keys()}"
+
+            rgb = observation["camera_obs"][sim_cam_name]
+            # gr00t uses numpy arrays
+            rgb = rgb.cpu().numpy()
+            # Apply preprocessing to rgb if size is not the same as the target size
+            if rgb.shape[1:3] != self.policy_config.target_image_size[:2]:
+                rgb = resize_frames_with_padding(
+                    rgb, target_image_size=self.policy_config.target_image_size, bgr_conversion=False, pad_img=True
+                )
+
+            policy_observations["video"][video_key] = rgb.reshape(
+                self.num_envs,
+                1,
+                self.policy_config.target_image_size[0],
+                self.policy_config.target_image_size[1],
+                self.policy_config.target_image_size[2],
+            )
+
+        # GR00T uses np arrays, needs to copy torch tensor from gpu to cpu before conversion
+        joint_pos_sim = observation["policy"][self.policy_config.joint_pos_obs_key].cpu()
+        joint_pos_state_sim = JointsAbsPosition(joint_pos_sim, self.robot_state_joints_config)
+        # Retrieve joint positions as proprioceptive states and remap to policy joint orders
+        joint_pos_state_policy = remap_sim_joints_to_policy_joints(joint_pos_state_sim, self.policy_joints_config)
 
         # Dynamically populate state keys from modality config
         for state_key in self.state_keys:
@@ -268,7 +280,7 @@ class Gr00tClosedloopPolicy(PolicyBase):
         # get action chunk if not yet computed
         if any(self.env_requires_new_action_chunk):
             # compute a new action chunk for the envs that require a new action chunk
-            returned_action_chunk = self.get_action_chunk(observation, self.policy_config.pov_cam_name_sim)
+            returned_action_chunk = self.get_action_chunk(observation)
             self.current_action_chunk[self.env_requires_new_action_chunk] = returned_action_chunk[
                 self.env_requires_new_action_chunk
             ]
@@ -301,7 +313,7 @@ class Gr00tClosedloopPolicy(PolicyBase):
         self.current_action_index[reset_env_ids] = -1
         return action
 
-    def get_action_chunk(self, observation: dict[str, Any], camera_name: str = "robot_head_cam_rgb") -> torch.Tensor:
+    def get_action_chunk(self, observation: dict[str, Any]) -> torch.Tensor:
         """Get a sequence of multiple future low-level actions that the policy predicts and outputs
         in a single forward pass, given the current observation and language instruction.
 
@@ -309,7 +321,7 @@ class Gr00tClosedloopPolicy(PolicyBase):
             action_chunk: a sequence of multiple future low-level actions.
             Shape: (num_envs, action_chunk_length, self.action_dim)
         """
-        policy_observations = self.get_observations(observation, camera_name)
+        policy_observations = self.get_observations(observation)
         robot_action_policy, _ = self.policy.get_action(policy_observations)
 
         robot_action_sim = remap_policy_joints_to_sim_joints(

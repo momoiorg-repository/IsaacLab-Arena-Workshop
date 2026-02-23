@@ -542,20 +542,29 @@ def convert_hdf5_to_lerobot(config: Gr00tDatasetConfig):
             "length": length,
         })
         # 2.3. Generate videos/
-        new_video_relpath = config.video_path.format(
-            episode_chunk=episode_chunk, video_key=config.lerobot_keys["video"], episode_index=episode_index
-        )
-        new_video_path = config.lerobot_data_dir / new_video_relpath
-        if config.video_name_lerobot not in video_paths.keys():
-            video_paths[config.video_name_lerobot] = new_video_path
+        camera_mappings = [
+            (config.pov_cam_name_sim, config.lerobot_keys["video"], config.video_name_lerobot)
+        ]
+        if config.front_cam_name_sim and "front_video" in config.lerobot_keys:
+            camera_mappings.append(
+                (config.front_cam_name_sim, config.lerobot_keys["front_video"], config.front_video_name_lerobot)
+            )
 
-        assert config.pov_cam_name_sim in trajectory["camera_obs"]
+        for sim_cam_name, lerobot_video_key, video_name_lerobot in camera_mappings:
+            new_video_relpath = config.video_path.format(
+                episode_chunk=episode_chunk, video_key=lerobot_video_key, episode_index=episode_index
+            )
+            new_video_path = config.lerobot_data_dir / new_video_relpath
+            if video_name_lerobot not in video_paths.keys():
+                video_paths[video_name_lerobot] = new_video_path
 
-        frames = np.array(trajectory["camera_obs"][config.pov_cam_name_sim])
-        # remove last frame due to how Lab reports observations
-        frames = frames[:-1]
-        assert len(frames) == length
-        queue.put((new_video_path, frames, config.fps, "image"))
+            assert sim_cam_name in trajectory["camera_obs"], f"{sim_cam_name} not found in camera_obs. Keys: {trajectory['camera_obs'].keys()}"
+
+            frames = np.array(trajectory["camera_obs"][sim_cam_name])
+            # remove last frame due to how Lab reports observations
+            frames = frames[:-1]
+            assert len(frames) == length
+            queue.put((new_video_path, frames, config.fps, "image"))
 
         if example_data is None:
             example_data = df_ret_dict
