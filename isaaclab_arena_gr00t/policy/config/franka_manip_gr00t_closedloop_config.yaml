@@ -18,9 +18,7 @@ state_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/9dof_joint_spa
 action_chunk_length: 16
 task_mode_name: franka_tabletop_manipulation
 
-pov_cam_name_sim: "wrist_cam_rgb"
-front_cam_name_sim: "front_cam"
-joint_pos_obs_key: "joint_pos"
+pov_cam_name_sim: ["wrist_cam_rgb", "front_cam"]
 
 original_image_size: [256, 256, 3]
 target_image_size: [256, 256, 3]
