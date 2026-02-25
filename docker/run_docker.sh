@@ -179,9 +179,10 @@ else
     if [ "$BREV_MODE" = "true" ]; then
         DOCKER_RUN_ARGS+=("--entrypoint" "${WORKDIR}/docker/setup/brev_entrypoint.sh")
     fi
-    # Allow X11 connections
-    # MEMO: Commentout for Cloud environment
-    xhost +local:docker > /dev/null
+    # Allow X11 connections (skip in brev/cloud — xhost not available)
+    if [ "$BREV_MODE" = "false" ]; then
+        xhost +local:docker > /dev/null
+    fi
 
     docker run "${DOCKER_RUN_ARGS[@]}" --interactive --rm --tty ${DOCKER_IMAGE_NAME}:${DOCKER_VERSION_TAG} "${@}"
 fi
