@@ -549,6 +549,10 @@ def convert_hdf5_to_lerobot(config: Gr00tDatasetConfig):
             camera_mappings.append(
                 (config.front_cam_name_sim, config.lerobot_keys["front_video"], config.front_video_name_lerobot)
             )
+        if config.right_cam_name_sim and "right_video" in config.lerobot_keys:
+            camera_mappings.append(
+                (config.right_cam_name_sim, config.lerobot_keys["right_video"], config.right_video_name_lerobot)
+            )
 
         for sim_cam_name, lerobot_video_key, video_name_lerobot in camera_mappings:
             new_video_relpath = config.video_path.format(

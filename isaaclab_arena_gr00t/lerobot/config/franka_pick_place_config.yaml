@@ -8,19 +8,21 @@ language_instruction: "Pick up the cube and place it in the container."
 task_index: 0
 
 # Name of the HDF5 file to use for the dataset
-hdf5_name: "test_demo_dataset_100.hdf5"
+hdf5_name: "/franka_demo_annotated.hdf5"
 
 # Mimic-generated HDF5 datafield names
 state_name_sim: "joint_pos"
 action_name_sim: "processed_actions"
 pov_cam_name_sim: "wrist_cam_rgb"
-front_cam_name_sim: "front_cam"
+front_cam_name_sim: "left_cam_rgb"
+right_cam_name_sim: "right_cam_rgb"
 
 # Gr00t-LeRobot datafield names
 state_name_lerobot: "observation.state"
 action_name_lerobot: "action"
 video_name_lerobot: "observation.images.ego_view"
-front_video_name_lerobot: "observation.images.front_view"
+front_video_name_lerobot: "observation.images.left_view"
+right_video_name_lerobot: "observation.images.right_view"
 task_description_lerobot: "annotation.human.task_description"
 
 # Parquet configuration

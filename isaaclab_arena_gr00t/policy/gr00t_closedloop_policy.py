@@ -117,6 +117,13 @@ class Gr00tClosedloopPolicy(PolicyBase):
         self.task_mode = TaskMode(self.policy_config.task_mode_name)
 
         self.policy_joints_config = self.load_policy_joints_config(self.policy_config.policy_joints_config_path)
+        # Load separate state policy joints config if provided; otherwise reuse policy_joints_config.
+        # Needed when state DOF ≠ action DOF (e.g. Franka: state=9 DOF with 2 gripper fingers,
+        # action=8 DOF with 1 gripper finger).
+        state_policy_path = (
+            self.policy_config.state_policy_joints_config_path or self.policy_config.policy_joints_config_path
+        )
+        self.state_policy_joints_config = self.load_policy_joints_config(state_policy_path)
         self.robot_action_joints_config = self.load_sim_action_joints_config(
             self.policy_config.action_joints_config_path
         )
@@ -235,7 +242,7 @@ class Gr00tClosedloopPolicy(PolicyBase):
         joint_pos_sim = observation["policy"]["robot_joint_pos"].cpu()
         joint_pos_state_sim = JointsAbsPosition(joint_pos_sim, self.robot_state_joints_config)
         # Retrieve joint positions as proprioceptive states and remap to policy joint orders
-        joint_pos_state_policy = remap_sim_joints_to_policy_joints(joint_pos_state_sim, self.policy_joints_config)
+        joint_pos_state_policy = remap_sim_joints_to_policy_joints(joint_pos_state_sim, self.state_policy_joints_config)
 
         # Pack inputs to dictionary and run the inference
         assert self.task_description is not None, "Task description is not set"

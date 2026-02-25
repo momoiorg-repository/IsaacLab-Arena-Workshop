@@ -170,7 +170,7 @@ else
     fi
     # Allow X11 connections
     # MEMO: Commentout for Cloud environment
-    # xhost +local:docker > /dev/null
+    xhost +local:docker > /dev/null
 
     docker run "${DOCKER_RUN_ARGS[@]}" --interactive --rm --tty ${DOCKER_IMAGE_NAME}:${DOCKER_VERSION_TAG} "${@}"
 fi

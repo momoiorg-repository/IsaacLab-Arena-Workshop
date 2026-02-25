@@ -197,9 +197,19 @@ class FrankaJointPositionActionsCfg:
 
 @configclass
 class FrankaCameraCfg:
-    """Configuration for cameras."""
+    """Configuration for cameras.
+
+    Mirrors DROID's DroidCameraCfg pattern: all cameras live on the robot prim so
+    they travel with the robot and are auto-wired as observations by make_camera_observation_cfg.
+    Field names determine the observation keys (field_name + "_rgb"), e.g.:
+      wrist_cam  -> camera_obs["wrist_cam_rgb"]
+      left_cam   -> camera_obs["left_cam_rgb"]
+      right_cam  -> camera_obs["right_cam_rgb"]
+    """
 
     wrist_cam: CameraCfg | TiledCameraCfg = MISSING
+    left_cam: CameraCfg | TiledCameraCfg = MISSING
+    right_cam: CameraCfg | TiledCameraCfg = MISSING
 
     def __post_init__(self):
         is_tiled_camera = getattr(self, "_is_tiled_camera", False)
@@ -208,23 +218,53 @@ class FrankaCameraCfg:
         CameraClass = TiledCameraCfg if is_tiled_camera else CameraCfg
         OffsetClass = CameraClass.OffsetCfg
 
-        common_kwargs = dict(
+        self.wrist_cam = CameraClass(
             prim_path="{ENV_REGEX_NS}/Robot/panda_hand/wrist_cam",
             update_period=0.0,
-            height=84,
-            width=84,
+            height=256,
+            width=256,
             data_types=["rgb"],
             spawn=sim_utils.PinholeCameraCfg(
                 focal_length=2.8, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
             ),
-        )
-        offset = OffsetClass(
-            pos=camera_offset.position_xyz,
-            rot=camera_offset.rotation_wxyz,
-            convention="ros",
+            offset=OffsetClass(
+                pos=camera_offset.position_xyz,
+                rot=camera_offset.rotation_wxyz,
+                convention="ros",
+            ),
         )
 
-        self.wrist_cam = CameraClass(offset=offset, **common_kwargs)
+        # Left external camera — positioned to the left of the workspace (positive Y),
+        # mirroring DROID's external_camera layout.
+        self.left_cam = CameraClass(
+            prim_path="{ENV_REGEX_NS}/Robot/left_cam",
+            update_period=0.0,
+            height=256,
+            width=256,
+            data_types=["rgb"],
+            spawn=sim_utils.PinholeCameraCfg(
+                focal_length=2.8, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
+            ),
+            offset=OffsetClass(
+                pos=(0.05, 0.57, 0.66), rot=(-0.393, -0.195, 0.399, 0.805), convention="opengl"
+            ),
+        )
+
+        # Right external camera — positioned to the right of the workspace (negative Y),
+        # mirroring DROID's external_camera_2 layout.
+        self.right_cam = CameraClass(
+            prim_path="{ENV_REGEX_NS}/Robot/right_cam",
+            update_period=0.0,
+            height=256,
+            width=256,
+            data_types=["rgb"],
+            spawn=sim_utils.PinholeCameraCfg(
+                focal_length=2.8, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
+            ),
+            offset=OffsetClass(
+                pos=(0.05, -0.57, 0.66), rot=(0.805, 0.399, -0.195, -0.393), convention="opengl"
+            ),
+        )
 
 
 @configclass
@@ -236,6 +276,9 @@ class FrankaObservationsCfg:
         """Observations for policy group with state values."""
 
         actions = ObsTerm(func=mdp_isaac_lab.last_action)
+        # Full joint state (absolute) used by the GR00T closed-loop policy.
+        # Key name matches DROID's DroidObservationsCfg and gr00t_closedloop_policy.py line 242.
+        robot_joint_pos = ObsTerm(func=mdp_isaac_lab.joint_pos, params={"asset_cfg": SceneEntityCfg("robot")})
         joint_pos = ObsTerm(func=mdp_isaac_lab.joint_pos_rel)
         joint_vel = ObsTerm(func=mdp_isaac_lab.joint_vel_rel)
         eef_pos = ObsTerm(func=ee_frame_pos)

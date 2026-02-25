@@ -2,15 +2,3 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
-
-joints:
-  "panda_joint1": 0
-  "panda_joint2": 1
-  "panda_joint3": 2
-  "panda_joint4": 3
-  "panda_joint5": 4
-  "panda_joint6": 5
-  "panda_joint7": 6
-  "finger_joint": 7
-
-total_joints: 8

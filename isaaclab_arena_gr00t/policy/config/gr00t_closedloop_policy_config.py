@@ -58,6 +58,19 @@ class Gr00tClosedloopPolicyConfig:
         default=TaskMode.G1_LOCOMANIPULATION.value,
         metadata={"description": "Task option name of the policy inference."},
     )
+    # Optional separate policy joints config for state remapping (sim → policy).
+    # If set, used by get_observations() instead of policy_joints_config_path.
+    # Needed when state DOF ≠ action DOF (e.g. Franka: state=9 DOF, action=8 DOF).
+    # DROID does not need this because state DOF == action DOF == 8.
+    state_policy_joints_config_path: Path = field(
+        default=None,
+        metadata={
+            "description": (
+                "Path to YAML for state remapping (sim→policy). "
+                "Defaults to policy_joints_config_path if unset."
+            )
+        },
+    )
     # robot simulation specific parameters
     action_joints_config_path: Path = field(
         default=Path(__file__).parent.parent.resolve() / "config" / "g1" / "43dof_joint_space.yaml",
@@ -121,6 +134,10 @@ class Gr00tClosedloopPolicyConfig:
             assert Path(
                 self.modality_config_path
             ).exists(), f"modality_config_path does not exist: {self.modality_config_path}"
+        if self.state_policy_joints_config_path:
+            assert Path(self.state_policy_joints_config_path).exists(), (
+                f"state_policy_joints_config_path does not exist: {self.state_policy_joints_config_path}"
+            )
 
         if isinstance(self.pov_cam_name_sim, str):
             self.pov_cam_name_sim = [self.pov_cam_name_sim]

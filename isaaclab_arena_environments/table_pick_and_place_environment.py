@@ -48,8 +48,8 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
         # Placing object on the white table in Galileo room
         pick_up_object.set_initial_pose(
             PoseRange(
-                position_xyz_min=(0.53, -0.05, 0.30),
-                position_xyz_max=(0.57, 0.05, 0.30),
+                position_xyz_min=(0.53, -0.15, 0.30),
+                position_xyz_max=(0.65, 0.15, 0.30),
             )
         )
         
@@ -63,36 +63,14 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
 
         scene = Scene(assets=[background, pick_up_object, destination_container, destination_location])
 
-        def add_front_cam(env_cfg):
-            from isaaclab.sensors import CameraCfg
-            import isaaclab.sim as sim_utils
-            from isaaclab.managers import SceneEntityCfg
-            from isaaclab.managers import ObservationTermCfg as ObsTerm
-            from isaaclab.envs import mdp
-
+        def setup_env(env_cfg):
+            # Cameras (wrist_cam, left_cam, right_cam) are defined in FrankaCameraCfg and wired in
+            # automatically by EmbodimentBase.get_observation_cfg() -> make_camera_observation_cfg().
+            # We only need to tell recording scripts which obs keys to save.
             if args_cli.enable_cameras:
-                env_cfg.scene.front_cam = CameraCfg(
-                    prim_path="{ENV_REGEX_NS}/front_cam",
-                    update_period=0.0,
-                    height=256,
-                    width=256,
-                    data_types=["rgb"],
-                    spawn=sim_utils.PinholeCameraCfg(
-                        focal_length=2.8, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
-                    ),
-                    offset=CameraCfg.OffsetCfg(
-                        pos=(1.0, 0.0, 1.1), rot=(0.65328, 0.27067, 0.27067, 0.65328), convention="opengl"
-                    )
-                )
-
-                env_cfg.observations.camera_obs.front_cam = ObsTerm(
-                    func=mdp.image,
-                    params={"sensor_cfg": SceneEntityCfg("front_cam"), "data_type": "rgb", "normalize": False},
-                )
                 if not hasattr(env_cfg, "image_obs_list"):
                     env_cfg.image_obs_list = []
-                env_cfg.image_obs_list.append("front_cam")
-
+                env_cfg.image_obs_list.extend(["wrist_cam_rgb", "left_cam_rgb", "right_cam_rgb"])
             return env_cfg
 
         isaaclab_arena_environment = IsaacLabArenaEnvironment(
@@ -100,13 +78,13 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
             embodiment=embodiment,
             scene=scene,
             task=PickAndPlaceTask(
-                pick_up_object, 
-                destination_location, 
-                background, 
+                pick_up_object,
+                destination_location,
+                background,
                 destination_object=destination_container
             ),
             teleop_device=teleop_device,
-            env_cfg_callback=add_front_cam,
+            env_cfg_callback=setup_env,
         )
         return isaaclab_arena_environment
 
@@ -116,4 +94,4 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
         parser.add_argument("--embodiment", type=str, default="franka")
         # NOTE(alexmillane, 2025.09.04): We need a teleop device argument in order
         # to be used in the record_demos.py script.
-        parser.add_argument("--teleop_device", type=str, default="keyboard")
+        parser.add_argument("--teleop_device", type=str, default=None)
