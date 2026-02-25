@@ -18,8 +18,10 @@ INSTALL_GROOT="false"
 # Whether to forcefully rebuild the docker image
 # (it takes a while to re-build, but for testing is not really necessary)
 FORCE_REBUILD=false
+# Whether to use the brev entrypoint
+BREV_MODE=false
 
-while getopts ":d:m:e:hn:rn:Rn:vn:gn:" OPTION; do
+while getopts ":d:m:e:hn:rn:Rn:vn:gn:b" OPTION; do
     case $OPTION in
 
         d)
@@ -49,6 +51,9 @@ while getopts ":d:m:e:hn:rn:Rn:vn:gn:" OPTION; do
             INSTALL_GROOT="true"
             DOCKER_VERSION_TAG='cuda_gr00t_gn16'
             ;;
+        b)
+            BREV_MODE=true
+            ;;
         h)
             script_name=$(basename "$0")
             echo "Helper script to build and IsaacLab Arena docker environment."
@@ -64,7 +69,8 @@ while getopts ":d:m:e:hn:rn:Rn:vn:gn:" OPTION; do
             echo "  -n <docker name> (Name of the docker image that will be built or used. Default is \"$DOCKER_IMAGE_NAME\".)"
             echo "  -r (Force rebuilding of the docker image.)"
             echo "  -R (Force rebuilding of the docker image, without cache.)"
-            echo "  -g (Install GR00T N1.6 dependencies.)"
+            echo "  -g (Install GR00T N1.6 dependencies.)
+  -b (Use brev entrypoint: docker/setup/brev_entrypoint.sh)"
             exit 0
             ;;
         \?)
@@ -167,6 +173,11 @@ else
     # if gr00t is installed, mount the gr00t directory in case anything needs to change there
     if [ "$INSTALL_GROOT" = "true" ]; then
         DOCKER_RUN_ARGS+=("-v" "./submodules/Isaac-GR00T:${WORKDIR}/submodules/Isaac-GR00T")
+    fi
+
+    # if brev mode, override the entrypoint
+    if [ "$BREV_MODE" = "true" ]; then
+        DOCKER_RUN_ARGS+=("--entrypoint" "${WORKDIR}/docker/setup/brev_entrypoint.sh")
     fi
     # Allow X11 connections
     # MEMO: Commentout for Cloud environment
