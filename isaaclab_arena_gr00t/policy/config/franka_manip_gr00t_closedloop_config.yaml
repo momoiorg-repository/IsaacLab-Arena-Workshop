@@ -4,8 +4,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Franka tabletop manipulation closed-loop policy config
-model_path: /models/workshop_franka_checkpoint_2000
-language_instruction: "Pick up the cube and place it on the target."
+model_path: /models/franka-gr00t-checkpoints-2000
+language_instruction: "Pick up the cube and place it on the red container."
 action_horizon: 16
 embodiment_tag: NEW_EMBODIMENT
 video_backend: decord

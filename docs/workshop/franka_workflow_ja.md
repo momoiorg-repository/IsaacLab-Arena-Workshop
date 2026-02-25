@@ -46,7 +46,8 @@ Franka ワークフローでは **2つのアクションスペース** を使い
 | フェーズ | embodiment | アクション | 目的 |
 |---|---|---|---|
 | テレオペ・データ生成 | `franka` | IK制御（エンドエフェクタ姿勢） | 人間が直感的に操作できる |
-| 学習・推論 | `franka_joint` | 関節角度制御（8DOF） | GR00Tが予測する形式に一致 |
+| データ変換・学習 | `franka` | 関節角度記録（8DOF）| IK解済み関節角度を保存 |
+| 推論（クローズドループ） | `franka_joint` | 関節角度制御（8DOF） | GR00T出力と一致 |
 
 > ⚠️ データ生成時は必ず `--embodiment franka` を使ってください。
 > `franka_joint` を使うとクラッシュします（IK変換が二重になるため）。
@@ -81,6 +82,13 @@ IsaacLab-Arena は Docker コンテナ内で動作します。
 - `-g` — GR00T N1.6 依存ライブラリを含むイメージを使用
 - `-b` — Brev 環境向けエントリポイント（ユーザー/グループの自動セットアップ）
 
+```bash
+./docker/run_docker.sh -g -b \
+  -d /ephemeral/dataset \
+  -m /ephemeral/model
+```
+
+
 ### 1-4. 出力ディレクトリの設定
 
 コンテナ内で以下を実行します。
@@ -91,26 +99,11 @@ export MODELS_DIR="/workspaces/isaaclab_arena/models"
 mkdir -p ${DATASET_DIR} ${MODELS_DIR}
 ```
 
-### 1-5. 環境の動作確認
-
-Franka アームがシーンに正しく表示されるか確認します。
-
-```bash
-LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/replay_demos.py \
-  --device cpu \
-  table_pick_and_place \
-  --embodiment franka \
-  --object dex_cube
-```
-
-ブラウザで `http://localhost:4700` を開き、ガリレオルームのテーブルに
-Franka Panda とキューブが表示されていれば成功です。
-
 ---
 
 ## 2. テレオペレーション (デモ収録)
 
-**目標**: キーボードで Franka アームを操作し、デモンストレーションを 20 件録画する。
+**目標**: キーボードで Franka アームを操作し、デモンストレーションを 5 件録画する。
 
 ### 2-1. キーボード操作の説明
 
@@ -119,7 +112,7 @@ Franka Panda とキューブが表示されていれば成功です。
 | `W` / `S` | エンドエフェクタ 前進 / 後退 (X軸) |
 | `A` / `D` | エンドエフェクタ 左 / 右 (Y軸) |
 | `Q` / `E` | エンドエフェクタ 上昇 / 下降 (Z軸) |
-| `Z` / `X` | グリッパー 開 / 閉 |
+| `K` | グリッパー 開 / 閉 |
 | `Enter` | デモを成功として保存 |
 | `R` | デモをリセット（やり直し） |
 
@@ -130,7 +123,7 @@ LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/record_demos.py \
   --device cpu \
   --enable_cameras \
   --dataset_file ${DATASET_DIR}/franka_demo.hdf5 \
-  --num_demos 3 \
+  --num_demos 5 \
   --num_success_steps 2 \
   table_pick_and_place \
   --embodiment franka \
@@ -139,7 +132,7 @@ LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/record_demos.py \
 ```
 
 **重要なオプション:**
-- `--num_demos 3` — 成功デモを 3 件収集（ワークショップでは時間節約のため 3 件）
+- `--num_demos 5` — 成功デモを 5 件収集（ワークショップでは時間節約のため 5 件）
 - `--num_success_steps 2` — 2ステップ連続で成功判定されるとデモを保存
 - `LIVESTREAM=2` — WebRTC でビジュアライズ（ポート 4700〜4900）
 
@@ -169,7 +162,7 @@ Isaac Lab Mimic は **少数のデモからサブタスク境界を学習し、�
 大量の成功デモを自動生成**します。
 
 ```
-[20件の人間デモ] → [サブタスクアノテーション] → [Mimic自動生成] → [数百〜数千件のデータ]
+[5件の人間デモ] → [サブタスクアノテーション] → [Mimic自動生成] → [数百〜数千件のデータ]
 ```
 
 ### 3-1. デモのアノテーション
@@ -197,12 +190,12 @@ LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/annotate_demos.py 
 
 ```bash
 LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/generate_dataset.py \
-  --device cpu \
+  --device cpu --headless \
   --enable_cameras \
   --input_file  ${DATASET_DIR}/franka_demo_annotated.hdf5 \
   --output_file ${DATASET_DIR}/franka_dataset.hdf5 \
-  --num_envs 5 \
-  --generation_num_trials 20 \
+  --num_envs 20 \
+  --generation_num_trials 100 \
   --mimic \
   table_pick_and_place \
   --object dex_cube \
@@ -210,8 +203,8 @@ LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/generate_dataset.p
 ```
 
 **オプション解説:**
-- `--num_envs 5` — 5つの並列環境で生成を高速化
-- `--generation_num_trials 20` — 20パターンを試行（成功したものを保存）
+- `--num_envs 20` — 20の並列環境で生成を高速化
+- `--generation_num_trials 100` — 100パターンを試行（成功したものを保存）
 
 **所要時間**: 約 5〜10 分（GPU の種類によって変動）
 
@@ -282,9 +275,9 @@ CUDA_VISIBLE_DEVICES=0 python \
   --no-tune-llm \
   --no-tune-visual \
   --global-batch-size 16 \
-  --max-steps 30000 \
+  --max-steps 10000 \
   --num-gpus 1 \
-  --save-steps 5000 \
+  --save-steps 2000 \
   --save-total-limit 5 \
   --dataloader-num-workers 16 \
   --use-wandb
@@ -307,8 +300,8 @@ CUDA_VISIBLE_DEVICES=0 python \
 講師から提供されたモデルを以下のパスに配置します:
 
 ```bash
-# 例: チェックポイントが checkpoint-20000 の場合
-ls ${MODELS_DIR}/checkpoint-20000/
+# 例: チェックポイントが checkpoint-2000 の場合
+ls ${MODELS_DIR}/checkpoint-2000/
 # → config.json  model.safetensors  training_args.bin  ...
 ```
 
@@ -325,8 +318,11 @@ GR00T の推論では `--embodiment franka_joint`（直接関節位置制御）�
 `model_path` が学習済みチェックポイントを指していることを確認します。
 
 ```bash
-# 例
-model_path: /workspaces/isaaclab_arena/models/checkpoint-20000
+# 例: 事前学習済みモデルを使う場合
+model_path: /models/franka-gr00t-checkpoints-2000
+
+# 例: 自分で学習した場合
+model_path: /workspaces/isaaclab_arena/models/checkpoint-2000
 ```
 
 ### 6-2. クローズドループ推論の実行

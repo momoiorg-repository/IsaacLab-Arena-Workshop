@@ -4,7 +4,7 @@
 NUM_GPUS=1
 BASE_MODEL="nvidia/GR00T-N1.6-3B"
 # Assumes the dataset is in the output folder relative to workspace root
-DATASET_PATH="/workspaces/isaaclab_arena/output/table_pick_place_cube_dataset"
+DATASET_PATH="/workspaces/isaaclab_arena/output/test_demo_dataset_100/lerobot"
 OUTPUT_DIR="/workspaces/isaaclab_arena/output/gr00t_franka_finetune"
 MODALITY_CONFIG="isaaclab_arena_gr00t/embodiments/franka/franka_modality_config.py"
 

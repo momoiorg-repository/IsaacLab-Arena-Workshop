@@ -16,6 +16,9 @@ from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import ManagerBasedRLMimicEnv
 from isaaclab.envs.mdp.actions import JointPositionActionCfg
 from isaaclab.envs.mdp.actions.actions_cfg import BinaryJointPositionActionCfg, DifferentialInverseKinematicsActionCfg
+from isaaclab.envs.mdp.actions.binary_joint_actions import BinaryJointPositionAction
+from isaaclab.envs.mdp.actions.joint_actions import JointPositionAction
+from isaaclab.envs.mdp.actions.task_space_actions import DifferentialInverseKinematicsAction
 from isaaclab.managers import ActionTermCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
@@ -158,11 +161,98 @@ class FrankaSceneCfg:
         self.ee_frame.visualizer_cfg = marker_cfg
 
 
+class FrankaIKJointRecordingAction(DifferentialInverseKinematicsAction):
+    """DifferentialIK action that records IK-solved joint positions as processed_actions.
+
+    The standard DifferentialInverseKinematicsAction stores the scaled EEF delta in
+    processed_actions, which is what PostStepProcessedActionsRecorder saves to HDF5.
+    GR00T training needs joint position targets, not EEF deltas. This subclass overrides
+    processed_actions to return the joint positions computed by the IK solver.
+    """
+
+    def __init__(self, cfg, env):
+        super().__init__(cfg, env)
+        self._ik_joint_pos = torch.zeros(self.num_envs, len(self._joint_names), device=self.device)
+
+    @property
+    def processed_actions(self) -> torch.Tensor:
+        """IK-solved joint position targets (recorded into HDF5 processed_actions)."""
+        return self._ik_joint_pos
+
+    def apply_actions(self):
+        ee_pos_curr, ee_quat_curr = self._compute_frame_pose()
+        joint_pos = self._asset.data.joint_pos[:, self._joint_ids]
+        if ee_quat_curr.norm() != 0:
+            jacobian = self._compute_frame_jacobian()
+            joint_pos_des = self._ik_controller.compute(ee_pos_curr, ee_quat_curr, jacobian, joint_pos)
+        else:
+            joint_pos_des = joint_pos.clone()
+        self._ik_joint_pos[:] = joint_pos_des
+        self._asset.set_joint_position_target(joint_pos_des, self._joint_ids)
+
+
+@configclass
+class FrankaIKJointRecordingActionCfg(DifferentialInverseKinematicsActionCfg):
+    """Config for FrankaIKJointRecordingAction."""
+
+    class_type: type = FrankaIKJointRecordingAction
+
+
+class FrankaGripperRecordingAction(BinaryJointPositionAction):
+    """Binary gripper action that drives both finger joints but records only 1 DOF.
+
+    The Franka USD does not have a mimic joint constraint, so panda_finger_joint2
+    must be driven explicitly. This class controls both fingers symmetrically while
+    returning only the first finger's target in processed_actions, keeping the
+    total recorded action at 8 DOF (7 arm + 1 gripper).
+    """
+
+    @property
+    def processed_actions(self) -> torch.Tensor:
+        # _processed_actions shape: (num_envs, 2). Return only column 0 so the
+        # HDF5 recorder sees 1 gripper DOF, matching 8dof_action_space.yaml.
+        return self._processed_actions[:, :1]
+
+
+@configclass
+class FrankaGripperRecordingActionCfg(BinaryJointPositionActionCfg):
+    """Config for FrankaGripperRecordingAction."""
+
+    class_type: type = FrankaGripperRecordingAction
+
+
+class FrankaJointMirrorAction(JointPositionAction):
+    """Joint position action that mirrors finger_joint1 to finger_joint2 at inference.
+
+    GR00T outputs 8 DOF (7 arm + 1 gripper). The 8-DOF action is applied normally
+    to [panda_joint1..7, panda_finger_joint1]. Since the Franka USD has no mimic
+    joint constraint, panda_finger_joint2 is additionally driven with the same
+    gripper value via a separate set_joint_position_target call.
+    """
+
+    def __init__(self, cfg, env):
+        super().__init__(cfg, env)
+        self._finger2_ids, _ = self._asset.find_joints(["panda_finger_joint2"])
+
+    def apply_actions(self):
+        super().apply_actions()
+        # Mirror the last (gripper) DOF to panda_finger_joint2
+        finger_target = self._processed_actions[:, -1:]
+        self._asset.set_joint_position_target(finger_target, joint_ids=self._finger2_ids)
+
+
+@configclass
+class FrankaJointMirrorActionCfg(JointPositionActionCfg):
+    """Config for FrankaJointMirrorAction."""
+
+    class_type: type = FrankaJointMirrorAction
+
+
 @configclass
 class FrankaActionsCfg:
     """Action specifications for the MDP."""
 
-    arm_action: ActionTermCfg = DifferentialInverseKinematicsActionCfg(
+    arm_action: ActionTermCfg = FrankaIKJointRecordingActionCfg(
         asset_name="robot",
         joint_names=["panda_joint.*"],
         body_name="panda_hand",
@@ -171,11 +261,15 @@ class FrankaActionsCfg:
         body_offset=DifferentialInverseKinematicsActionCfg.OffsetCfg(pos=[0.0, 0.0, 0.107]),
     )
 
-    gripper_action: ActionTermCfg = BinaryJointPositionActionCfg(
+    # Both fingers driven symmetrically. FrankaGripperRecordingAction returns only
+    # finger_joint1's target in processed_actions, keeping the recorded action at
+    # 8 DOF (7 arm + 1 gripper) to match 8dof_action_space.yaml.
+    # The Franka USD has no mimic joint constraint, so both fingers must be driven.
+    gripper_action: ActionTermCfg = FrankaGripperRecordingActionCfg(
         asset_name="robot",
         joint_names=["panda_finger.*"],
-        open_command_expr={"panda_finger_.*": 0.04},
-        close_command_expr={"panda_finger_.*": 0.0},
+        open_command_expr={"panda_finger_joint1": 0.04, "panda_finger_joint2": 0.04},
+        close_command_expr={"panda_finger_joint1": 0.0, "panda_finger_joint2": 0.0},
     )
 
 
@@ -183,11 +277,12 @@ class FrankaActionsCfg:
 class FrankaJointPositionActionsCfg:
     """Joint position action config for GR00T closed-loop inference.
 
-    Uses direct joint position control (7 arm joints + 1 gripper finger = 8 DOF)
-    instead of IK-based control.
+    Uses direct joint position control (7 arm joints + 1 gripper finger = 8 DOF).
+    FrankaJointMirrorAction additionally drives panda_finger_joint2 with the same
+    value, since the Franka USD has no mimic joint constraint.
     """
 
-    joint_pos = JointPositionActionCfg(
+    joint_pos = FrankaJointMirrorActionCfg(
         asset_name="robot",
         joint_names=["panda_joint.*", "panda_finger_joint1"],
         scale=1.0,
@@ -279,8 +374,10 @@ class FrankaObservationsCfg:
         # Full joint state (absolute) used by the GR00T closed-loop policy.
         # Key name matches DROID's DroidObservationsCfg and gr00t_closedloop_policy.py line 242.
         robot_joint_pos = ObsTerm(func=mdp_isaac_lab.joint_pos, params={"asset_cfg": SceneEntityCfg("robot")})
-        joint_pos = ObsTerm(func=mdp_isaac_lab.joint_pos_rel)
-        joint_vel = ObsTerm(func=mdp_isaac_lab.joint_vel_rel)
+        # joint_pos recorded into HDF5 as training state — must be absolute to match
+        # robot_joint_pos used at inference (gr00t_closedloop_policy.py reads robot_joint_pos).
+        joint_pos = ObsTerm(func=mdp_isaac_lab.joint_pos, params={"asset_cfg": SceneEntityCfg("robot")})
+        joint_vel = ObsTerm(func=mdp_isaac_lab.joint_vel, params={"asset_cfg": SceneEntityCfg("robot")})
         eef_pos = ObsTerm(func=ee_frame_pos)
         eef_quat = ObsTerm(func=ee_frame_quat)
         gripper_pos = ObsTerm(func=gripper_pos)
