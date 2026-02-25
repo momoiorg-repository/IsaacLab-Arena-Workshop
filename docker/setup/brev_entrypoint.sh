@@ -5,6 +5,10 @@ set -e
 # Make sure that all shared libs are found.
 ldconfig
 
+# Fetch and export the public IP (used for WebRTC/LIVESTREAM access from Brev)
+export PUBLIC_IP=$(curl -s ifconfig.me)
+echo "Public IP: ${PUBLIC_IP}"
+
 # --- REMOVE CONFLICTING USERS FIRST ---
 # We do this first because userdel might delete the group (if names match),
 # so we want to clear the slate before setting up groups.
