@@ -562,7 +562,16 @@ def convert_hdf5_to_lerobot(config: Gr00tDatasetConfig):
             if video_name_lerobot not in video_paths.keys():
                 video_paths[video_name_lerobot] = new_video_path
 
-            assert sim_cam_name in trajectory["camera_obs"], f"{sim_cam_name} not found in camera_obs. Keys: {trajectory['camera_obs'].keys()}"
+            if "camera_obs" not in trajectory:
+                raise KeyError(
+                    f"'camera_obs' group not found in trajectory '{trajectory_id}'. "
+                    f"Trajectory keys: {list(trajectory.keys())}. "
+                    f"Did you record/annotate/generate with --enable_cameras?"
+                )
+            assert sim_cam_name in trajectory["camera_obs"], (
+                f"'{sim_cam_name}' not found in camera_obs. "
+                f"camera_obs keys: {list(trajectory['camera_obs'].keys())}"
+            )
 
             frames = np.array(trajectory["camera_obs"][sim_cam_name])
             # remove last frame due to how Lab reports observations
