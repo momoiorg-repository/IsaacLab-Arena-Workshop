@@ -9,6 +9,14 @@ from pathlib import Path
 from isaaclab_arena_gr00t.policy.config.task_mode import TaskMode
 
 
+def _is_huggingface_model_id(model_path: str) -> bool:
+    """Return True if model_path looks like a HuggingFace Hub repo id (e.g. 'nvidia/GR00T-N1.6-3B')."""
+    if not model_path:
+        return False
+    # HF repo ids are "owner/repo_name" - no leading path sep, and not an existing local path
+    return "/" in model_path and not model_path.startswith(("/", ".")) and not Path(model_path).exists()
+
+
 @dataclass
 class Gr00tClosedloopPolicyConfig:
 
@@ -50,6 +58,19 @@ class Gr00tClosedloopPolicyConfig:
         default=TaskMode.G1_LOCOMANIPULATION.value,
         metadata={"description": "Task option name of the policy inference."},
     )
+    # Optional separate policy joints config for state remapping (sim → policy).
+    # If set, used by get_observations() instead of policy_joints_config_path.
+    # Needed when state DOF ≠ action DOF (e.g. Franka: state=9 DOF, action=8 DOF).
+    # DROID does not need this because state DOF == action DOF == 8.
+    state_policy_joints_config_path: Path = field(
+        default=None,
+        metadata={
+            "description": (
+                "Path to YAML for state remapping (sim→policy). "
+                "Defaults to policy_joints_config_path if unset."
+            )
+        },
+    )
     # robot simulation specific parameters
     action_joints_config_path: Path = field(
         default=Path(__file__).parent.parent.resolve() / "config" / "g1" / "43dof_joint_space.yaml",
@@ -72,8 +93,12 @@ class Gr00tClosedloopPolicyConfig:
         default="cuda", metadata={"description": "Device to run the policy model on (e.g., 'cuda' or 'cpu')."}
     )
     video_backend: str = field(default="decord", metadata={"description": "Video backend to use for evaluation."})
-    pov_cam_name_sim: str = field(
-        default="robot_head_cam_rgb", metadata={"description": "Name of the POV camera of the robot in simulation."}
+    pov_cam_name_sim: list[str] = field(
+        default_factory=lambda: ["robot_head_cam_rgb"],
+        metadata={"description": "Names of the POV cameras of the robot in simulation."},
+    )
+    front_cam_name_sim: str = field(
+        default=None, metadata={"description": "Name of the front camera of the environment in simulation."}
     )
     joint_pos_obs_key: str = field(
         default="robot_joint_pos",
@@ -102,15 +127,27 @@ class Gr00tClosedloopPolicyConfig:
         assert Path(
             self.state_joints_config_path
         ).exists(), f"state_joints_config_path does not exist: {self.state_joints_config_path}"
-        assert Path(self.model_path).exists(), f"model_path does not exist: {self.model_path}"
-        assert Path(
-            self.modality_config_path
-        ).exists(), f"modality_config_path does not exist: {self.modality_config_path}"
+        assert Path(self.model_path).exists() or _is_huggingface_model_id(
+            self.model_path
+        ), f"model_path does not exist and is not a HuggingFace model id: {self.model_path}"
+        if self.modality_config_path:
+            assert Path(
+                self.modality_config_path
+            ).exists(), f"modality_config_path does not exist: {self.modality_config_path}"
+        if self.state_policy_joints_config_path:
+            assert Path(self.state_policy_joints_config_path).exists(), (
+                f"state_policy_joints_config_path does not exist: {self.state_policy_joints_config_path}"
+            )
+
+        if isinstance(self.pov_cam_name_sim, str):
+            self.pov_cam_name_sim = [self.pov_cam_name_sim]
+
         # embodiment_tag
         assert self.embodiment_tag in [
             "GR1",
             "NEW_EMBODIMENT",
-        ], "embodiment_tag must be one of the following: " + ", ".join(["GR1", "NEW_EMBODIMENT"])
+            "OXE_DROID",
+        ], "embodiment_tag must be one of the following: " + ", ".join(["GR1", "NEW_EMBODIMENT", "OXE_DROID"])
         if self.task_mode_name == TaskMode.G1_LOCOMANIPULATION.value:
             assert (
                 self.embodiment_tag == "NEW_EMBODIMENT"
@@ -121,5 +158,7 @@ class Gr00tClosedloopPolicyConfig:
             assert (
                 self.embodiment_tag == "NEW_EMBODIMENT"
             ), "embodiment_tag must be NEW_EMBODIMENT for Franka tabletop manipulation"
+        elif self.task_mode_name == TaskMode.DROID_MANIPULATION.value:
+            assert self.embodiment_tag == "OXE_DROID", "embodiment_tag must be OXE_DROID for DROID manipulation"
         else:
             raise ValueError(f"Invalid inference mode: {self.task_mode_name}")

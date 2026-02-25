@@ -87,6 +87,7 @@ def main():
     # Load job configuration before starting simulation to check requirements
     add_eval_runner_arguments(args_parser)
     args_cli, _ = args_parser.parse_known_args()
+    assert not args_cli.distributed, "Distributed evaluation is not supported yet"
 
     assert os.path.exists(
         args_cli.eval_jobs_config
@@ -120,8 +121,8 @@ def main():
                             job.num_steps = policy.length()
                         else:
                             job.num_steps = args_cli.num_steps
-
-                    metrics = rollout_policy(env, policy, num_steps=job.num_steps)
+                    # TODO (xinjieyao, 2026-02-19): add num_episodes support
+                    metrics = rollout_policy(env, policy, num_steps=job.num_steps, num_episodes=None)
 
                     job_manager.complete_job(job, metrics=metrics, status=Status.COMPLETED)
 

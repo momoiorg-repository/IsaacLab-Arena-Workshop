@@ -5,7 +5,7 @@ from gr00t.data.types import ModalityConfig, ActionConfig, ActionRepresentation,
 franka_config = {
     "video": ModalityConfig(
         delta_indices=[0],
-        modality_keys=["ego_view"],
+        modality_keys=["ego_view", "left_view", "right_view"],
     ),
     "state": ModalityConfig(
         delta_indices=[0],

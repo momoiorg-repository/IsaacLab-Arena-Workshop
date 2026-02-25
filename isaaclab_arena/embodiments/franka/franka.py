@@ -7,13 +7,11 @@
 import torch
 from collections.abc import Sequence
 from dataclasses import MISSING
-from typing import Any
 
 import isaaclab.envs.mdp as mdp_isaac_lab
 import isaaclab.sim as sim_utils
 import isaaclab.utils.math as PoseUtils
 from isaaclab.assets.articulation.articulation_cfg import ArticulationCfg
-from isaaclab.assets.asset_base_cfg import AssetBaseCfg
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import ManagerBasedRLMimicEnv
 from isaaclab.envs.mdp.actions import JointPositionActionCfg
@@ -26,12 +24,12 @@ from isaaclab.managers import RewardTermCfg, SceneEntityCfg
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.sensors import CameraCfg, TiledCameraCfg  # noqa: F401
 from isaaclab.sensors.frame_transformer.frame_transformer_cfg import FrameTransformerCfg, OffsetCfg
-from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
 from isaaclab.utils import configclass
 from isaaclab_assets.robots.franka import FRANKA_PANDA_HIGH_PD_CFG
 from isaaclab_tasks.manager_based.manipulation.stack.mdp import franka_stack_events
 from isaaclab_tasks.manager_based.manipulation.stack.mdp.observations import ee_frame_pos, ee_frame_quat
 
+from isaaclab_arena.assets.object_library import ISAACLAB_STAGING_NUCLEUS_DIR
 from isaaclab_arena.assets.register import register_asset
 from isaaclab_arena.embodiments.common.arm_mode import ArmMode
 from isaaclab_arena.embodiments.common.mimic_utils import get_rigid_and_articulated_object_poses
@@ -40,6 +38,13 @@ from isaaclab_arena.embodiments.franka.observations import gripper_pos
 from isaaclab_arena.utils.pose import Pose
 
 _DEFAULT_CAMERA_OFFSET = Pose(position_xyz=(0.11, -0.031, -0.074), rotation_wxyz=(-0.74896, 0.0, 0.0, -0.66262))
+
+
+# The reason to use our internal panda USD is to combine the panda and the stand within one USD.
+# This is not ideal but currently required by the ObjectPlacementSolver to handle the robot placement correctly.
+# TODO(cvolk): Move to the IsaacLab supported FRANKA_CFG and handle the handling of the stand internally.
+_FRANKA_CFG = FRANKA_PANDA_HIGH_PD_CFG.copy()
+_FRANKA_CFG.spawn.usd_path = f"{ISAACLAB_STAGING_NUCLEUS_DIR}/Arena/assets/robot_library/franka_panda_hand_on_stand.usd"
 
 
 @register_asset
@@ -72,16 +77,6 @@ class FrankaEmbodiment(EmbodimentBase):
         self.camera_config = FrankaCameraCfg()
         self.camera_config._is_tiled_camera = is_tiled_camera
         self.camera_config._camera_offset = camera_offset
-
-    def _update_scene_cfg_with_robot_initial_pose(self, scene_config: Any, pose: Pose) -> Any:
-        # We override the default initial pose setting function in order to also set
-        # the initial pose of the stand.
-        scene_config = super()._update_scene_cfg_with_robot_initial_pose(scene_config, pose)
-        if scene_config is None or not hasattr(scene_config, "robot"):
-            raise RuntimeError("scene_config must be populated with a `robot` before calling `set_robot_initial_pose`.")
-        scene_config.stand.init_state.pos = pose.position_xyz
-        scene_config.stand.init_state.rot = pose.rotation_wxyz
-        return scene_config
 
     def set_initial_joint_pose(self, initial_joint_pose: list[float]) -> None:
         self.event_config.init_franka_arm_pose.params["default_pose"] = initial_joint_pose
@@ -123,20 +118,8 @@ class FrankaJointEmbodiment(FrankaEmbodiment):
 class FrankaSceneCfg:
     """Additions to the scene configuration coming from the Franka embodiment."""
 
-    # The robot
-    robot: ArticulationCfg = FRANKA_PANDA_HIGH_PD_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
-
-    # The stand for the franka
-    # TODO(alexmillane, 2025-07-28): We probably want to make the stand an optional addition.
-    stand: AssetBaseCfg = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Robot_Stand",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[-0.05, 0.0, 0.0], rot=[1.0, 0.0, 0.0, 0.0]),
-        spawn=UsdFileCfg(
-            usd_path="https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5/Isaac/Props/Mounts/Stand/stand_instanceable.usd",
-            scale=(1.2, 1.2, 1.7),
-            activate_contact_sensors=False,
-        ),
-    )
+    # The robot (combined USD includes both the panda and the stand)
+    robot: ArticulationCfg = _FRANKA_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # The end-effector frame marker
     ee_frame: FrameTransformerCfg = FrameTransformerCfg(
@@ -214,9 +197,19 @@ class FrankaJointPositionActionsCfg:
 
 @configclass
 class FrankaCameraCfg:
-    """Configuration for cameras."""
+    """Configuration for cameras.
+
+    Mirrors DROID's DroidCameraCfg pattern: all cameras live on the robot prim so
+    they travel with the robot and are auto-wired as observations by make_camera_observation_cfg.
+    Field names determine the observation keys (field_name + "_rgb"), e.g.:
+      wrist_cam  -> camera_obs["wrist_cam_rgb"]
+      left_cam   -> camera_obs["left_cam_rgb"]
+      right_cam  -> camera_obs["right_cam_rgb"]
+    """
 
     wrist_cam: CameraCfg | TiledCameraCfg = MISSING
+    left_cam: CameraCfg | TiledCameraCfg = MISSING
+    right_cam: CameraCfg | TiledCameraCfg = MISSING
 
     def __post_init__(self):
         is_tiled_camera = getattr(self, "_is_tiled_camera", False)
@@ -225,23 +218,53 @@ class FrankaCameraCfg:
         CameraClass = TiledCameraCfg if is_tiled_camera else CameraCfg
         OffsetClass = CameraClass.OffsetCfg
 
-        common_kwargs = dict(
+        self.wrist_cam = CameraClass(
             prim_path="{ENV_REGEX_NS}/Robot/panda_hand/wrist_cam",
             update_period=0.0,
-            height=84,
-            width=84,
+            height=256,
+            width=256,
             data_types=["rgb"],
             spawn=sim_utils.PinholeCameraCfg(
                 focal_length=2.8, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
             ),
-        )
-        offset = OffsetClass(
-            pos=camera_offset.position_xyz,
-            rot=camera_offset.rotation_wxyz,
-            convention="ros",
+            offset=OffsetClass(
+                pos=camera_offset.position_xyz,
+                rot=camera_offset.rotation_wxyz,
+                convention="ros",
+            ),
         )
 
-        self.wrist_cam = CameraClass(offset=offset, **common_kwargs)
+        # Left external camera — positioned to the left of the workspace (positive Y),
+        # mirroring DROID's external_camera layout.
+        self.left_cam = CameraClass(
+            prim_path="{ENV_REGEX_NS}/Robot/left_cam",
+            update_period=0.0,
+            height=256,
+            width=256,
+            data_types=["rgb"],
+            spawn=sim_utils.PinholeCameraCfg(
+                focal_length=2.8, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
+            ),
+            offset=OffsetClass(
+                pos=(0.05, 0.57, 0.66), rot=(-0.393, -0.195, 0.399, 0.805), convention="opengl"
+            ),
+        )
+
+        # Right external camera — positioned to the right of the workspace (negative Y),
+        # mirroring DROID's external_camera_2 layout.
+        self.right_cam = CameraClass(
+            prim_path="{ENV_REGEX_NS}/Robot/right_cam",
+            update_period=0.0,
+            height=256,
+            width=256,
+            data_types=["rgb"],
+            spawn=sim_utils.PinholeCameraCfg(
+                focal_length=2.8, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
+            ),
+            offset=OffsetClass(
+                pos=(0.05, -0.57, 0.66), rot=(0.805, 0.399, -0.195, -0.393), convention="opengl"
+            ),
+        )
 
 
 @configclass
@@ -253,6 +276,9 @@ class FrankaObservationsCfg:
         """Observations for policy group with state values."""
 
         actions = ObsTerm(func=mdp_isaac_lab.last_action)
+        # Full joint state (absolute) used by the GR00T closed-loop policy.
+        # Key name matches DROID's DroidObservationsCfg and gr00t_closedloop_policy.py line 242.
+        robot_joint_pos = ObsTerm(func=mdp_isaac_lab.joint_pos, params={"asset_cfg": SceneEntityCfg("robot")})
         joint_pos = ObsTerm(func=mdp_isaac_lab.joint_pos_rel)
         joint_vel = ObsTerm(func=mdp_isaac_lab.joint_vel_rel)
         eef_pos = ObsTerm(func=ee_frame_pos)

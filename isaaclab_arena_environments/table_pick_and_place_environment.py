@@ -22,7 +22,7 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
         from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
         from isaaclab_arena.scene.scene import Scene
         from isaaclab_arena.tasks.pick_and_place_task import PickAndPlaceTask
-        from isaaclab_arena.utils.pose import Pose
+        from isaaclab_arena.utils.pose import Pose, PoseRange
         from isaaclab_arena.assets.object_base import ObjectType
         from isaaclab_arena.assets.object_reference import ObjectReference
 
@@ -47,9 +47,9 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
         # Set poses
         # Placing object on the white table in Galileo room
         pick_up_object.set_initial_pose(
-            Pose(
-                position_xyz=(0.55, 0.0, 0.30),
-                rotation_wxyz=(1.0, 0.0, 0.0, 0.0),
+            PoseRange(
+                position_xyz_min=(0.53, -0.15, 0.30),
+                position_xyz_max=(0.65, 0.15, 0.30),
             )
         )
         
@@ -62,17 +62,29 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
         )
 
         scene = Scene(assets=[background, pick_up_object, destination_container, destination_location])
+
+        def setup_env(env_cfg):
+            # Cameras (wrist_cam, left_cam, right_cam) are defined in FrankaCameraCfg and wired in
+            # automatically by EmbodimentBase.get_observation_cfg() -> make_camera_observation_cfg().
+            # We only need to tell recording scripts which obs keys to save.
+            if args_cli.enable_cameras:
+                if not hasattr(env_cfg, "image_obs_list"):
+                    env_cfg.image_obs_list = []
+                env_cfg.image_obs_list.extend(["wrist_cam_rgb", "left_cam_rgb", "right_cam_rgb"])
+            return env_cfg
+
         isaaclab_arena_environment = IsaacLabArenaEnvironment(
             name=self.name,
             embodiment=embodiment,
             scene=scene,
             task=PickAndPlaceTask(
-                pick_up_object, 
-                destination_location, 
-                background, 
+                pick_up_object,
+                destination_location,
+                background,
                 destination_object=destination_container
             ),
             teleop_device=teleop_device,
+            env_cfg_callback=setup_env,
         )
         return isaaclab_arena_environment
 
@@ -82,4 +94,4 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
         parser.add_argument("--embodiment", type=str, default="franka")
         # NOTE(alexmillane, 2025.09.04): We need a teleop device argument in order
         # to be used in the record_demos.py script.
-        parser.add_argument("--teleop_device", type=str, default="keyboard")
+        parser.add_argument("--teleop_device", type=str, default=None)

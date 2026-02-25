@@ -4,22 +4,22 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Franka tabletop manipulation closed-loop policy config
-model_path: /models/checkpoint-2000
+model_path: /models/workshop_franka_checkpoint_2000
 language_instruction: "Pick up the cube and place it on the target."
 action_horizon: 16
 embodiment_tag: NEW_EMBODIMENT
 video_backend: decord
 modality_config_path: isaaclab_arena_gr00t/embodiments/franka/franka_modality_config.py
 
-policy_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/gr00t_9dof_joint_space.yaml
+policy_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/gr00t_8dof_action_space.yaml
+state_policy_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/gr00t_9dof_joint_space.yaml
 action_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/8dof_action_space.yaml
 state_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/9dof_joint_space.yaml
 
 action_chunk_length: 16
 task_mode_name: franka_tabletop_manipulation
 
-pov_cam_name_sim: "wrist_cam_rgb"
-joint_pos_obs_key: "joint_pos"
+pov_cam_name_sim: ["wrist_cam_rgb", "left_cam_rgb", "right_cam_rgb"]
 
-original_image_size: [84, 84, 3]
-target_image_size: [84, 84, 3]
+original_image_size: [256, 256, 3]
+target_image_size: [256, 256, 3]
