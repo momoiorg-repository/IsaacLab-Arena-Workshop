@@ -64,7 +64,7 @@ Franka ワークフローでは **2つのアクションスペース** を使い
 ### 1-2. IsaacLab-Arena リポジトリをクローン
 
 ```bash
-git clone https://github.com/isaac-sim/IsaacLab-Arena.git /workspaces/isaaclab_arena
+git clone https://github.com/momoiorg-repository/IsaacLab-Arena-Workshop.git /workspaces/isaaclab_arena
 cd /workspaces/isaaclab_arena
 ```
 
@@ -73,11 +73,13 @@ cd /workspaces/isaaclab_arena
 IsaacLab-Arena は Docker コンテナ内で動作します。
 
 ```bash
-# Base コンテナ（テレオペ・データ生成用）
-./docker/run_docker.sh
+# GR00T コンテナを起動（テレオペ・データ生成・学習・推論すべてに使用）
+./docker/run_docker.sh -g -b
 ```
 
-GR00T の学習・推論には GR00T コンテナを使います（後のステップで案内）。
+**オプション:**
+- `-g` — GR00T N1.6 依存ライブラリを含むイメージを使用
+- `-b` — Brev 環境向けエントリポイント（ユーザー/グループの自動セットアップ）
 
 ### 1-4. 出力ディレクトリの設定
 
@@ -119,7 +121,7 @@ Franka Panda とキューブが表示されていれば成功です。
 | `Q` / `E` | エンドエフェクタ 上昇 / 下降 (Z軸) |
 | `Z` / `X` | グリッパー 開 / 閉 |
 | `Enter` | デモを成功として保存 |
-| `Backspace` | デモをリセット（やり直し） |
+| `R` | デモをリセット（やり直し） |
 
 ### 2-2. デモの録画
 
@@ -128,7 +130,7 @@ LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/record_demos.py \
   --device cpu \
   --enable_cameras \
   --dataset_file ${DATASET_DIR}/franka_demo.hdf5 \
-  --num_demos 20 \
+  --num_demos 3 \
   --num_success_steps 2 \
   table_pick_and_place \
   --embodiment franka \
@@ -137,14 +139,14 @@ LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/record_demos.py \
 ```
 
 **重要なオプション:**
-- `--num_demos 20` — 成功デモを 20 件収集（ワークショップでは時間節約のため 20 件）
+- `--num_demos 3` — 成功デモを 3 件収集（ワークショップでは時間節約のため 3 件）
 - `--num_success_steps 2` — 2ステップ連続で成功判定されるとデモを保存
 - `LIVESTREAM=2` — WebRTC でビジュアライズ（ポート 4700〜4900）
 
 **コツ:**
 - ゆっくり・なめらかに動かす（IK コントローラが追従するため）
 - 1回の動作でピック→プレースを完結させる
-- 失敗したら `Backspace` でリセット
+- 失敗したら `R` でリセット
 
 ### 2-3. 録画の確認（任意）
 
@@ -173,10 +175,9 @@ Isaac Lab Mimic は **少数のデモからサブタスク境界を学習し、�
 ### 3-1. デモのアノテーション
 
 Mimic が機能するためには、デモに**サブタスク境界**を付ける必要があります。
-Franka ピック＆プレースには 2 つのサブタスクがあります:
+Franka ピック＆プレースには 1 つのサブタスクがあります:
 
 1. **Reach** — キューブに手を伸ばす（グリッパーがキューブに触れる直前）
-2. **Place** — キューブをコンテナに置く（グリッパーがコンテナの上にくる）
 
 ```bash
 LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/annotate_demos.py \
@@ -193,8 +194,6 @@ LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/annotate_demos.py 
 画面の CLI プロンプトに従い、各デモの境界を指定してください。
 
 ### 3-2. データセット生成（Mimic）
-
-> ⚠️ `--embodiment franka` を使うこと（`franka_joint` ではない）
 
 ```bash
 LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/generate_dataset.py \
@@ -213,7 +212,6 @@ LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/generate_dataset.p
 **オプション解説:**
 - `--num_envs 5` — 5つの並列環境で生成を高速化
 - `--generation_num_trials 20` — 20パターンを試行（成功したものを保存）
-- ワークショップでは時間節約のため 20 トライアル。本番では 100〜1000 以上を推奨
 
 **所要時間**: 約 5〜10 分（GPU の種類によって変動）
 
@@ -259,15 +257,9 @@ python isaaclab_arena_gr00t/lerobot/convert_hdf5_to_lerobot.py \
 > このステップはコマンドを実行して確認するだけにとどめ、
 > **事前学習済みチェックポイントを講師から提供します**。
 
-### 5-1. GR00T コンテナの起動
+### 5-1. コンテナの確認
 
-Post-training と推論には GR00T コンテナが必要です。
-
-```bash
-# ホストから（Base コンテナを抜けてから）
-./docker/run_docker.sh gr00t
-```
-
+Step 1-3 で起動した GR00T コンテナ（`-g -b`）をそのまま使います。
 コンテナ内で環境変数を設定:
 
 ```bash
