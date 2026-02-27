@@ -95,8 +95,6 @@ IsaacLab-Arena は Docker コンテナ内で動作します。
 
 ```bash
 export DATASET_DIR="/workspaces/isaaclab_arena/output"
-export MODELS_DIR="/workspaces/isaaclab_arena/models"
-mkdir -p ${DATASET_DIR} ${MODELS_DIR}
 ```
 
 ---
@@ -122,7 +120,7 @@ mkdir -p ${DATASET_DIR} ${MODELS_DIR}
 LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/record_demos.py \
   --device cpu \
   --enable_cameras \
-  --dataset_file ${DATASET_DIR}/franka_demo.hdf5 \
+  --dataset_file ${DATASET_DIR}/franka_demo1.hdf5 \
   --num_demos 5 \
   --num_success_steps 2 \
   table_pick_and_place \
@@ -263,10 +261,10 @@ export MODELS_DIR="/workspaces/isaaclab_arena/models"
 ### 5-2. GR00T N1.6 ファインチューン（確認用・実行のみ）
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python \
+python -m torch.distributed.run --nproc_per_node=1 --standalone \
   submodules/Isaac-GR00T/gr00t/experiment/launch_finetune.py \
-  --base-model-path nvidia/GR00T-N1.6-3B \
-  --dataset-path ${DATASET_DIR}/franka_dataset/lerobot \
+  --base-model-path nvidia/GR00T-N1.6-DROID \
+  --dataset-path ${DATASET_DIR} \
   --output-dir ${MODELS_DIR} \
   --modality-config-path isaaclab_arena_gr00t/embodiments/franka/franka_modality_config.py \
   --embodiment-tag NEW_EMBODIMENT \
@@ -274,14 +272,17 @@ CUDA_VISIBLE_DEVICES=0 python \
   --tune-diffusion-model \
   --no-tune-llm \
   --no-tune-visual \
-  --global-batch-size 16 \
-  --max-steps 10000 \
+  --global-batch-size 1 \
+  --gradient-accumulation-steps 32 \
+  --max-steps 5000 \
   --num-gpus 1 \
-  --save-steps 2000 \
-  --save-total-limit 5 \
-  --dataloader-num-workers 16 \
-  --use-wandb
+  --save-steps 100 \
+  --save-total-limit 2 \
+  --dataloader-num-workers 32 \
+  --color-jitter-params brightness 0.3 contrast 0.4 saturation 0.5 hue 0.08
 ```
+nvidia/GR00T-N1.6-3B
+nvidia/GR00T-N1.6-DROID
 
 **フリーズするモジュール（重要）:**
 - `--no-tune-llm` — LLM バックボーンを凍結（カタストロフィックフォーゲットを防ぐ）
@@ -290,6 +291,10 @@ CUDA_VISIBLE_DEVICES=0 python \
 **更新するモジュール:**
 - `--tune-projector` — モダリティプロジェクターを更新
 - `--tune-diffusion-model` — アクション生成部を更新
+
+**バッチサイズについて:**
+- `--global-batch-size 1 --gradient-accumulation-steps 32` → 実効バッチサイズ = 32
+- OOM 対策として `global-batch-size 1` に設定し、勾配を 32 ステップ蓄積します
 
 **本番の推奨設定:**
 - 1× L40s (48GB): `--max-steps 30000`（約 2〜3 時間）
@@ -328,13 +333,13 @@ model_path: /workspaces/isaaclab_arena/models/checkpoint-2000
 ### 6-2. クローズドループ推論の実行
 
 ```bash
-python isaaclab_arena/evaluation/policy_runner.py \
+LIVESTREAM=2 python isaaclab_arena/evaluation/policy_runner.py \
   --device cpu \
   --policy_type isaaclab_arena_gr00t.policy.gr00t_closedloop_policy.Gr00tClosedloopPolicy \
   --policy_config_yaml_path isaaclab_arena_gr00t/policy/config/franka_manip_gr00t_closedloop_config.yaml \
   --policy_device cuda \
   --enable_cameras \
-  --num_steps 200 \
+  --num_steps 2000 \
   table_pick_and_place \
   --embodiment franka_joint \
   --object dex_cube

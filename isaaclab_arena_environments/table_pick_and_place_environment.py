@@ -81,7 +81,8 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
                 pick_up_object,
                 destination_location,
                 background,
-                destination_object=destination_container
+                destination_object=destination_container,
+                episode_length_s=8.0,
             ),
             teleop_device=teleop_device,
             env_cfg_callback=setup_env,
