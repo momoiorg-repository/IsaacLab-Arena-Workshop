@@ -26,7 +26,7 @@ Guidelines for modifications:
 
 ## Contributors
 
-* an <umegbox@gmail.com>
+* An <umegan, an.yunagi@gmail.com>
 * Ashley Chow <ashchow@nvidia.com> (NVIDIA)
 * Lance Li <Nyquist0, lancel@nvidia.com> (NVIDIA)
 * Mikhail Yurasov <myurasov-nv, myurasov@nvidia.com> (NVIDIA)
