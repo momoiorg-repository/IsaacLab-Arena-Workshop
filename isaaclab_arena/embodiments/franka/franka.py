@@ -108,8 +108,13 @@ class FrankaJointEmbodiment(FrankaEmbodiment):
         is_tiled_camera: bool = False,
     ):
         super().__init__(
-            enable_cameras, initial_pose, initial_joint_pose,
-            concatenate_observation_terms, arm_mode, camera_offset, is_tiled_camera,
+            enable_cameras,
+            initial_pose,
+            initial_joint_pose,
+            concatenate_observation_terms,
+            arm_mode,
+            camera_offset,
+            is_tiled_camera,
         )
         self.action_config = FrankaJointPositionActionsCfg()
 
@@ -340,9 +345,7 @@ class FrankaCameraCfg:
             spawn=sim_utils.PinholeCameraCfg(
                 focal_length=2.8, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
             ),
-            offset=OffsetClass(
-                pos=(0.05, 0.57, 0.66), rot=(-0.393, -0.195, 0.399, 0.805), convention="opengl"
-            ),
+            offset=OffsetClass(pos=(0.05, 0.57, 0.66), rot=(-0.393, -0.195, 0.399, 0.805), convention="opengl"),
         )
 
         # Right external camera — positioned to the right of the workspace (negative Y),
@@ -356,9 +359,7 @@ class FrankaCameraCfg:
             spawn=sim_utils.PinholeCameraCfg(
                 focal_length=2.8, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
             ),
-            offset=OffsetClass(
-                pos=(0.05, -0.57, 0.66), rot=(0.805, 0.399, -0.195, -0.393), convention="opengl"
-            ),
+            offset=OffsetClass(pos=(0.05, -0.57, 0.66), rot=(0.805, 0.399, -0.195, -0.393), convention="opengl"),
         )
 
 
