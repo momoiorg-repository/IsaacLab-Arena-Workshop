@@ -201,6 +201,7 @@ TABLE OF CONTENTS
    pages/example_workflows/locomanipulation/index
    pages/example_workflows/static_manipulation/index
    pages/example_workflows/sequential_static_manipulation/index
+   pages/example_workflows/franka_pick_and_place/index
    pages/example_workflows/reinforcement_learning/index
 
 .. toctree::
