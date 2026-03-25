@@ -45,8 +45,8 @@ Environment Description
 
               pick_up_object.set_initial_pose(
                   PoseRange(
-                      position_xyz_min=(0.53, -0.05, 0.30),
-                      position_xyz_max=(0.57, 0.05, 0.30),
+                      position_xyz_min=(0.53, -0.15, 0.30),
+                      position_xyz_max=(0.65, 0.15, 0.30),
                   )
               )
 
@@ -96,8 +96,8 @@ See :doc:`../../concepts/concept_assets_design` for details on asset architectur
 
    pick_up_object.set_initial_pose(
        PoseRange(
-           position_xyz_min=(0.53, -0.05, 0.30),
-           position_xyz_max=(0.57, 0.05, 0.30),
+           position_xyz_min=(0.53, -0.15, 0.30),
+           position_xyz_max=(0.65, 0.15, 0.30),
        )
    )
    destination_container.set_initial_pose(

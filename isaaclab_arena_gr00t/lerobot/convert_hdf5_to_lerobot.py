@@ -176,7 +176,7 @@ def get_feature_info(
         Dictionary containing feature information for each column and video.
     """
     policy_joints_config = load_robot_joints_config_from_yaml(config.policy_joints_config_path)
-    # flatten dict of dict into a single dict, perseving the order of the keys
+    # flatten dict of dict into a single dict, preserving the order of the keys
     policy_joints_names = []
     for joint_group in policy_joints_config.keys():
         for joint_name in policy_joints_config[joint_group]:
@@ -521,8 +521,6 @@ def convert_hdf5_to_lerobot(config: Gr00tDatasetConfig):
                 trajectory=trajectory, episode_index=episode_index, index_start=total_length, config=config
             )
         except Exception as e:
-            import traceback
-
             traceback.print_exc()
             print(f"Error loading trajectory {trajectory_id}: {e}")
             continue

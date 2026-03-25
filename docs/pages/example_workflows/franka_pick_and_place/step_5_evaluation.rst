@@ -33,7 +33,7 @@ should point to your trained checkpoint:
 
       model_path: /models/isaaclab_arena/franka_pick_and_place/checkpoint-20000
 
-      language_instruction: "Pick up the cube and place it in the container."
+      language_instruction: "Pick up the cube and place it on the container."
       action_horizon: 16
       embodiment_tag: NEW_EMBODIMENT
       video_backend: decord
