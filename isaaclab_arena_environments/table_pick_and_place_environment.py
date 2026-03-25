@@ -1,4 +1,4 @@
-# Copyright (c) 2025, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -19,18 +19,18 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
     name: str = "table_pick_and_place"
 
     def get_env(self, args_cli: argparse.Namespace):  # -> IsaacLabArenaEnvironment:
+        from isaaclab_arena.assets.object_base import ObjectType
+        from isaaclab_arena.assets.object_reference import ObjectReference
         from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
         from isaaclab_arena.scene.scene import Scene
         from isaaclab_arena.tasks.pick_and_place_task import PickAndPlaceTask
         from isaaclab_arena.utils.pose import Pose, PoseRange
-        from isaaclab_arena.assets.object_base import ObjectType
-        from isaaclab_arena.assets.object_reference import ObjectReference
 
         background = self.asset_registry.get_asset_by_name("galileo")()
         pick_up_object = self.asset_registry.get_asset_by_name(args_cli.object)()
         destination_container = self.asset_registry.get_asset_by_name("red_container")()
         embodiment = self.asset_registry.get_asset_by_name(args_cli.embodiment)(enable_cameras=args_cli.enable_cameras)
-        
+
         # Goal object
         destination_location = ObjectReference(
             name="destination_location",
@@ -52,7 +52,7 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
                 position_xyz_max=(0.65, 0.15, 0.30),
             )
         )
-        
+
         # Placing container on the white table in Galileo room
         destination_container.set_initial_pose(
             Pose(
@@ -81,7 +81,8 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
                 pick_up_object,
                 destination_location,
                 background,
-                destination_object=destination_container
+                destination_object=destination_container,
+                episode_length_s=8.0,
             ),
             teleop_device=teleop_device,
             env_cfg_callback=setup_env,
