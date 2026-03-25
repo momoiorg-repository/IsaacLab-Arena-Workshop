@@ -88,9 +88,9 @@ def _run_pick_and_place_object_set_test(
             assert path_contains[i] in path, f"Path does not contain {path_contains[i]!r}: {path}"
         if initial_pose is not None:
             assert obj_set.get_initial_pose() is not None, "Initial pose is None"
-        assert env.scene[obj_set.name].data.root_pose_w is not None, "Root pose is None"
+        assert env.unwrapped.scene[obj_set.name].data.root_pose_w is not None, "Root pose is None"
         assert (
-            env.scene.sensors["pick_up_object_contact_sensor"].data.force_matrix_w is not None
+            env.unwrapped.scene.sensors["pick_up_object_contact_sensor"].data.force_matrix_w is not None
         ), "Contact sensor data is None"
         return True
     except Exception as e:
@@ -244,14 +244,14 @@ def _test_object_set_with_ranch_and_bbq_bottles(simulation_app):
     from isaaclab_arena.assets.object_set import RigidObjectSet
 
     asset_registry = AssetRegistry()
-    ranch_dressing_bottle = asset_registry.get_asset_by_name("ranch_dressing_bottle")()
-    bbq_sauce_bottle = asset_registry.get_asset_by_name("bbq_sauce_bottle")()
+    ranch_dressing_bottle = asset_registry.get_asset_by_name("ranch_dressing_hope_robolab")()
+    bbq_sauce_bottle = asset_registry.get_asset_by_name("bbq_sauce_bottle_hope_robolab")()
     obj_set = RigidObjectSet(
         name="ObjectSet_Bottles",
         objects=[ranch_dressing_bottle, bbq_sauce_bottle],
         prim_path=OBJECT_SET_BOTTLES_PRIM_PATH,
     )
-    path_contains = ["ranch_dressing" if i % 2 == 0 else "bbq_sauce_bottle" for i in range(NUM_ENVS)]
+    path_contains = ["ranch_dressing" if i % 2 == 0 else "bbq_sauce_bottle_hope_robolab" for i in range(NUM_ENVS)]
     return _run_pick_and_place_object_set_test(
         simulation_app,
         obj_set,
