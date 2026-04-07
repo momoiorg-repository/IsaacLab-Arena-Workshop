@@ -182,8 +182,8 @@ else
     if [ "$BREV_MODE" = "true" ]; then
         DOCKER_RUN_ARGS+=("--entrypoint" "${WORKDIR}/docker/setup/brev_entrypoint.sh")
     fi
-    # Allow X11 connections (skip in brev/cloud — xhost not available)
-    if [ "$BREV_MODE" = "false" ]; then
+    # Allow X11 connections (skip when no display is available)
+    if [ "$BREV_MODE" = "false" ] && [ -n "$DISPLAY" ]; then
         xhost +local:docker > /dev/null
     fi
 
