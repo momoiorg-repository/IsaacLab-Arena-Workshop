@@ -28,7 +28,7 @@ Step 2: Record Demonstrations
 
       .. code-block:: bash
 
-         LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/record_demos.py \
+         python isaaclab_arena/scripts/imitation_learning/record_demos.py \
            --device cpu \
            --enable_cameras \
            --dataset_file ${DATASET_DIR}/franka_demo.hdf5 \
@@ -43,7 +43,7 @@ Step 2: Record Demonstrations
 
       .. code-block:: bash
 
-         LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/record_demos.py \
+         python isaaclab_arena/scripts/imitation_learning/record_demos.py \
            --device cpu \
            --enable_cameras \
            --dataset_file ${DATASET_DIR}/franka_demo.hdf5 \
@@ -59,7 +59,6 @@ Key arguments:
 - ``--embodiment franka`` — IK-controlled Franka. Records ``processed_actions`` (joint targets) automatically.
 - ``--num_demos 10`` — collect 10 successful demonstrations.
 - ``--num_success_steps 2`` — require 2 consecutive success steps to count a demo as successful.
-- ``LIVESTREAM=2`` — enables remote visualization via WebRTC (ports 4700–4900).
 
 The script saves successful demonstrations to ``${DATASET_DIR}/franka_demo.hdf5``.
 
@@ -79,7 +78,7 @@ Replay the recorded demonstrations to confirm they were captured correctly:
 
 .. code-block:: bash
 
-   LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/replay_demos.py \
+   python isaaclab_arena/scripts/imitation_learning/replay_demos.py \
      --device cpu \
      --dataset_file ${DATASET_DIR}/franka_demo.hdf5 \
      table_pick_and_place \

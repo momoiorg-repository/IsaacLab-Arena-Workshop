@@ -16,7 +16,22 @@ This step demonstrates running the trained GR00T N1.6 policy in closed-loop and 
 on the Franka pick-and-place task.
 
 Note that this tutorial assumes that you've completed the
-:doc:`preceding step (Policy Training) <step_4_policy_training>`.
+:doc:`preceding step (Policy Training) <step_4_policy_training>` or downloaded the
+pre-trained checkpoint from Hugging Face as described below.
+
+.. dropdown:: Download Pre-trained Checkpoint (skip training step)
+   :animate: fade-in
+
+   To skip policy training, download the pre-trained GR00T N1.6 checkpoint:
+
+   .. code-block:: bash
+
+      hf download \
+         umegan/workshop-franka-gr00tn1-6-checkpoints-15000 \
+         --repo-type model \
+         --local-dir $MODELS_DIR
+
+   Then update ``model_path`` in the config to ``/models/isaaclab_arena/franka_pick_and_place``.
 
 
 Step 1: Configure the Policy

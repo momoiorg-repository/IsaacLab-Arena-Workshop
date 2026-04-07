@@ -14,7 +14,34 @@ Once inside the container, set the dataset and models directories:
 
 This step covers post-training the GR00T N1.6 foundation model on the Franka pick-and-place dataset.
 Note that this tutorial assumes that you've completed the
-:doc:`preceding step (Data Generation) <step_3_data_generation>`.
+:doc:`preceding step (Data Generation) <step_3_data_generation>` or downloaded the
+pre-generated dataset from Hugging Face as described below.
+
+.. dropdown:: Download Pre-generated Dataset (skip preceding steps)
+   :animate: fade-in
+
+   To skip teleoperation and data generation, download the Mimic-generated HDF5 dataset:
+
+   .. code-block:: bash
+
+      hf download \
+         umegan/isaaclab-arena-franka-dataset \
+         franka_dataset.hdf5 \
+         --repo-type dataset \
+         --local-dir $DATASET_DIR
+
+.. dropdown:: Download Pre-converted LeRobot Dataset (skip conversion step)
+   :animate: fade-in
+
+   To skip the LeRobot conversion step, download the pre-converted dataset:
+
+   .. code-block:: bash
+
+      hf download \
+         umegan/isaaclab-arena-franka-dataset \
+         --include "franka_dataset/lerobot/*" \
+         --repo-type dataset \
+         --local-dir $DATASET_DIR
 
 
 Step 1: Convert to LeRobot Format
@@ -85,32 +112,33 @@ The GR00T N1.6 policy has 3 billion parameters. We provide two post-training opt
       Training Configuration:
 
       - **Base Model:** GR00T-N1.6-3B (foundation model)
-      - **Tuned Modules:** Projector, diffusion model
-      - **Frozen Modules:** LLM, visual backbone
+      - **Tuned Modules:** Visual backbone, projector, diffusion model
+      - **Frozen Modules:** LLM
       - **Batch Size:** 24 (adjust based on GPU memory)
       - **Training Steps:** 20,000
       - **GPUs:** 8 (multi-GPU training)
 
       .. code-block:: bash
 
-         python -m torch.distributed.run --nproc_per_node=8 --standalone \
-           submodules/Isaac-GR00T/gr00t/experiment/launch_finetune.py \
-           --base-model-path nvidia/GR00T-N1.6-3B \
-           --dataset-path ${DATASET_DIR}/franka_dataset/lerobot \
-           --output-dir ${MODELS_DIR} \
-           --modality-config-path isaaclab_arena_gr00t/embodiments/franka/franka_modality_config.py \
-           --embodiment-tag NEW_EMBODIMENT \
-           --tune-projector \
-           --tune-diffusion-model \
-           --no-tune-llm \
-           --no-tune-visual \
-           --global-batch-size 24 \
-           --max-steps 20000 \
-           --num-gpus 8 \
-           --save-steps 5000 \
-           --save-total-limit 5 \
-           --dataloader-num-workers 16 \
-           --use-wandb
+         python -m torch.distributed.run --nproc_per_node=8 --standalone submodules/Isaac-GR00T/gr00t/experiment/launch_finetune.py \
+         --dataset_path=$DATASET_DIR/franka_dataset/lerobot \
+         --output_dir=$MODELS_DIR \
+         --modality_config_path=isaaclab_arena_gr00t/embodiments/franka/franka_modality_config.py \
+         --global_batch_size=24 \
+         --max_steps=20000 \
+         --num_gpus=8 \
+         --save_steps=5000 \
+         --save_total_limit=5 \
+         --base_model_path=nvidia/GR00T-N1.6-3B \
+         --no_tune_llm \
+         --tune_visual \
+         --tune_projector \
+         --tune_diffusion_model \
+         --no-resume \
+         --dataloader_num_workers=16 \
+         --use-wandb \
+         --embodiment_tag=NEW_EMBODIMENT \
+         --color_jitter_params brightness 0.3 contrast 0.4 saturation 0.5 hue 0.08
 
    .. tab:: Low Hardware Requirements
 
@@ -119,39 +147,41 @@ The GR00T N1.6 policy has 3 billion parameters. We provide two post-training opt
       Training Configuration:
 
       - **Base Model:** GR00T-N1.6-3B (foundation model)
-      - **Tuned Modules:** Projector, diffusion model
-      - **Frozen Modules:** LLM, visual backbone
+      - **Tuned Modules:** Visual backbone, projector, diffusion model
+      - **Frozen Modules:** LLM
       - **Batch Size:** 16 (adjust based on GPU memory)
       - **Training Steps:** 30,000
       - **GPUs:** 1 (single-GPU training)
 
       .. code-block:: bash
 
-         CUDA_VISIBLE_DEVICES=0 python \
-           submodules/Isaac-GR00T/gr00t/experiment/launch_finetune.py \
-           --base-model-path nvidia/GR00T-N1.6-3B \
-           --dataset-path ${DATASET_DIR}/franka_dataset/lerobot \
-           --output-dir ${MODELS_DIR} \
-           --modality-config-path isaaclab_arena_gr00t/embodiments/franka/franka_modality_config.py \
-           --embodiment-tag NEW_EMBODIMENT \
-           --tune-projector \
-           --tune-diffusion-model \
-           --no-tune-llm \
-           --no-tune-visual \
-           --global-batch-size 16 \
-           --max-steps 30000 \
-           --num-gpus 1 \
-           --save-steps 5000 \
-           --save-total-limit 5 \
-           --dataloader-num-workers 16 \
-           --use-wandb
+         CUDA_VISIBLE_DEVICES=0 python submodules/Isaac-GR00T/gr00t/experiment/launch_finetune.py \
+         --dataset_path=$DATASET_DIR/franka_dataset/lerobot \
+         --output_dir=$MODELS_DIR \
+         --modality_config_path=isaaclab_arena_gr00t/embodiments/franka/franka_modality_config.py \
+         --global_batch_size=16 \
+         --max_steps=30000 \
+         --num_gpus=1 \
+         --save_steps=5000 \
+         --base_model_path=nvidia/GR00T-N1.6-3B \
+         --no_tune_llm \
+         --tune_visual \
+         --tune_projector \
+         --tune_diffusion_model \
+         --dataloader_num_workers=16 \
+         --use-wandb \
+         --embodiment_tag=NEW_EMBODIMENT \
+         --color_jitter_params brightness 0.3 contrast 0.4 saturation 0.5 hue 0.08 \
+         --save_total_limit=5
 
 Key arguments:
 
-- ``--base-model-path nvidia/GR00T-N1.6-3B`` — downloads the foundation model from Hugging Face automatically.
-- ``--embodiment-tag NEW_EMBODIMENT`` — used for custom embodiments not in the base model.
-- ``--modality-config-path`` — Franka-specific modality config defining video/state/action keys.
-- ``--no-tune-llm``, ``--no-tune-visual`` — freeze the LLM and visual backbone to prevent catastrophic forgetting.
+- ``--base_model_path=nvidia/GR00T-N1.6-3B`` — downloads the foundation model from Hugging Face automatically.
+- ``--embodiment_tag=NEW_EMBODIMENT`` — used for custom embodiments not in the base model.
+- ``--modality_config_path`` — Franka-specific modality config defining video/state/action keys.
+- ``--tune_visual``, ``--tune_projector``, ``--tune_diffusion_model`` — tune visual backbone, projector and diffusion model.
+- ``--no_tune_llm`` — freeze the LLM to prevent catastrophic forgetting.
+- ``--color_jitter_params`` — data augmentation for better real-world generalization.
 
 See the `GR00T fine-tuning guidelines <https://github.com/NVIDIA/Isaac-GR00T#3-fine-tuning>`_
 for information on how to adjust the training configuration to your hardware.

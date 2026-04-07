@@ -1,6 +1,12 @@
 Franka Pick and Place Task
 ==========================
 
+.. image:: ../../../images/franka_pick_and_place.gif
+   :width: 80%
+   :align: center
+
+|
+
 This example demonstrates the complete workflow for the **Franka pick and place task** in Isaac Lab - Arena,
 covering environment setup and validation, teleoperation data collection, data generation with Isaac Lab Mimic,
 policy post-training, and closed-loop evaluation.

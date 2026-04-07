@@ -13,6 +13,20 @@ Note that this tutorial assumes that you've completed the
 :doc:`preceding step (Teleoperation Data Collection) <step_2_teleoperation>`.
 
 
+.. dropdown:: Download Pre-annotated Dataset (skip annotation step)
+   :animate: fade-in
+
+   To skip the annotation step, download the pre-annotated dataset from Hugging Face:
+
+   .. code-block:: bash
+
+      hf download \
+         umegan/isaaclab-arena-franka-dataset \
+         franka_demo_annotated.hdf5 \
+         --repo-type dataset \
+         --local-dir $DATASET_DIR
+
+
 .. _franka_step_1_annotate_demonstrations:
 
 Step 1: Annotate Demonstrations
@@ -26,7 +40,7 @@ For more details on mimic annotation, refer to the
 
 .. code-block:: bash
 
-   LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/annotate_demos.py \
+   python isaaclab_arena/scripts/imitation_learning/annotate_demos.py \
      --device cpu \
      --input_file  ${DATASET_DIR}/franka_demo.hdf5 \
      --output_file ${DATASET_DIR}/franka_demo_annotated.hdf5 \
@@ -40,6 +54,20 @@ Follow the on-screen CLI instructions to mark subtask boundaries for each record
 
 1. **Reach:** Robot reaches toward the cube
 2. **Place:** Robot places the cube into the container
+
+
+.. dropdown:: Download Pre-generated Dataset (skip data generation step)
+   :animate: fade-in
+
+   To skip data generation, download the pre-generated dataset from Hugging Face:
+
+   .. code-block:: bash
+
+      hf download \
+         umegan/isaaclab-arena-franka-dataset \
+         franka_dataset.hdf5 \
+         --repo-type dataset \
+         --local-dir $DATASET_DIR
 
 
 .. _franka_step_2_generate_augmented_dataset:
@@ -58,7 +86,7 @@ introduce object position variations.
 
 .. code-block:: bash
 
-   LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/generate_dataset.py \
+   python isaaclab_arena/scripts/imitation_learning/generate_dataset.py \
      --device cpu \
      --enable_cameras \
      --input_file  ${DATASET_DIR}/franka_demo_annotated.hdf5 \
@@ -86,7 +114,7 @@ Replay the generated dataset to verify it visually:
 
 .. code-block:: bash
 
-   LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/replay_demos.py \
+   python isaaclab_arena/scripts/imitation_learning/replay_demos.py \
      --device cpu \
      --enable_cameras \
      --dataset_file ${DATASET_DIR}/franka_dataset.hdf5 \
