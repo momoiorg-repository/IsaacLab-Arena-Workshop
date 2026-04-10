@@ -78,9 +78,7 @@ At the end of the run, metrics are printed to the console:
         dexsuite_lift
 
    However, the model behaviour may differ significantly when training and
-   evaluation use different physics backends. The above model, which was
-   trained with Newton, fails to grasp or lift the cube completely when
-   evaluated with PhysX.
+   evaluation use different physics backends.
 
 
 Parallel Environment Evaluation
