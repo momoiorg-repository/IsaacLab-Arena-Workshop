@@ -61,7 +61,6 @@ class Gr00tClosedloopPolicyConfig:
     # Optional separate policy joints config for state remapping (sim → policy).
     # If set, used by get_observations() instead of policy_joints_config_path.
     # Needed when state DOF ≠ action DOF (e.g. Franka: state=9 DOF, action=8 DOF).
-    # DROID does not need this because state DOF == action DOF == 8.
     state_policy_joints_config_path: Path = field(
         default=None,
         metadata={

@@ -151,6 +151,12 @@ class MimicRecorderManagerCfg(ActionStateRecorderManagerCfg):
 
     record_pre_step_datagen_info = PreStepDatagenInfoRecorderCfg()
     record_pre_step_subtask_term_signals = PreStepSubtaskTermsObservationsRecorderCfg()
+
+
+@configclass
+class MimicWithCamerasRecorderManagerCfg(MimicRecorderManagerCfg):
+    """Mimic recorder terms with camera observations."""
+
     record_pre_step_camera_observations = PreStepCameraObservationsRecorderCfg()
 
 
@@ -194,7 +200,10 @@ def main():
     env_cfg.terminations = None
 
     # Set up recorder terms for mimic annotations
-    env_cfg.recorders: MimicRecorderManagerCfg = MimicRecorderManagerCfg()
+    if args_cli.enable_cameras:
+        env_cfg.recorders: MimicRecorderManagerCfg = MimicWithCamerasRecorderManagerCfg()
+    else:
+        env_cfg.recorders: MimicRecorderManagerCfg = MimicRecorderManagerCfg()
     if not args_cli.auto:
         # disable subtask term signals recorder term if in manual mode
         env_cfg.recorders.record_pre_step_subtask_term_signals = None
