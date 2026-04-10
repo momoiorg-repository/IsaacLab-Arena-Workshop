@@ -3,7 +3,6 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-import contextlib
 import h5py
 import json
 import multiprocessing as mp
@@ -627,7 +626,7 @@ def convert_hdf5_to_lerobot(config: Gr00tDatasetConfig):
             if worker.is_alive():
                 worker.terminate()
                 worker.join()
-        with contextlib.suppress(Exception):
+        if not hdf5_handler.closed:
             hdf5_handler.close()
         raise  # Re-raise the exception after cleanup
 
