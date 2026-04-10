@@ -41,6 +41,7 @@ parser.add_argument(
     action="store_true",
     help="pause after every subtask during generation for debugging - only useful with render flag",
 )
+
 # Add the example environments CLI args
 # NOTE(alexmillane, 2025.09.04): This has to be added last, because
 # of the app specific flags being parsed after the global flags.
@@ -73,6 +74,7 @@ from isaaclab.utils import configclass
 from isaaclab_mimic.datagen.generation import env_loop, setup_async_generation
 from isaaclab_mimic.datagen.utils import setup_output_paths
 
+# start logger
 logger = logging.getLogger(__name__)
 
 

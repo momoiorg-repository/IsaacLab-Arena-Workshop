@@ -179,10 +179,6 @@ class Gr00tClosedloopPolicy(PolicyBase):
             strict=True,
         )
 
-    # ------------------------------------------------------------------ #
-    # Public API
-    # ------------------------------------------------------------------ #
-
     def set_task_description(self, task_description: str | None) -> str:
         """Set the language instruction of the task being evaluated."""
         if task_description is None:
