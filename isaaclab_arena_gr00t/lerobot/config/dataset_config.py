@@ -197,10 +197,6 @@ class Gr00tDatasetConfig:
             self.hdf5_keys["teleop_torso_orientation_rpy_command"] = self.teleop_torso_orientation_rpy_command_name_sim
         if self.action_eef_name_sim:
             self.hdf5_keys["action_eef_pose"] = self.action_eef_name_sim
-        if self.front_cam_name_sim:
-            self.hdf5_keys["front_cam_rgb"] = self.front_cam_name_sim
-        if self.right_cam_name_sim:
-            self.hdf5_keys["right_cam_rgb"] = self.right_cam_name_sim
 
         # Prepare data keys for LeRobot file
         self.lerobot_keys = {
