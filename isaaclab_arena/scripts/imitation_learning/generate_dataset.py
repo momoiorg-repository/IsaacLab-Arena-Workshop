@@ -41,6 +41,12 @@ parser.add_argument(
     action="store_true",
     help="pause after every subtask during generation for debugging - only useful with render flag",
 )
+parser.add_argument(
+    "--enable_pinocchio",
+    action="store_true",
+    default=False,
+    help="Enable Pinocchio.",
+)
 
 # Add the example environments CLI args
 # NOTE(alexmillane, 2025.09.04): This has to be added last, because
@@ -49,6 +55,11 @@ add_example_environments_cli_args(parser)
 
 # parse the arguments
 args_cli = parser.parse_args()
+
+if args_cli.enable_pinocchio:
+    # Import pinocchio before AppLauncher to force the use of the version installed by IsaacLab and not the one installed by Isaac Sim
+    # pinocchio is required by the Pink IK controllers and the GR1T2 retargeter
+    import pinocchio  # noqa: F401
 
 # launch the simulator
 app_launcher = AppLauncher(args_cli)
@@ -66,15 +77,20 @@ import random
 import torch
 
 import isaaclab_mimic.envs  # noqa: F401
-import isaaclab_tasks  # noqa: F401
 from isaaclab.envs import ManagerBasedRLMimicEnv
 from isaaclab.envs.mdp.recorders.recorders_cfg import ActionStateRecorderManagerCfg
 from isaaclab.managers import DatasetExportMode, RecorderTerm, RecorderTermCfg
 from isaaclab.utils import configclass
+
+# Imports have to follow simulation startup.
+
+if args_cli.enable_pinocchio:
+    import isaaclab_mimic.envs.pinocchio_envs  # noqa: F401
+
+import isaaclab_tasks  # noqa: F401
 from isaaclab_mimic.datagen.generation import env_loop, setup_async_generation
 from isaaclab_mimic.datagen.utils import setup_output_paths
 
-# start logger
 logger = logging.getLogger(__name__)
 
 
@@ -146,10 +162,15 @@ def setup_env_config(
     env_cfg.observations.policy.concatenate_terms = False
 
     # Setup recorders
+    print(f"[DEBUG] args_cli.enable_cameras: {args_cli.enable_cameras}")
     if args_cli.enable_cameras:
+        print("[DEBUG] Setting up ArenaEnvRecorderManagerCfg (Cameras Enabled)")
         env_cfg.recorders = ArenaEnvRecorderManagerCfg()
     else:
+        print("[DEBUG] Setting up ActionStateRecorderManagerCfg (Cameras Disabled)")
         env_cfg.recorders = ActionStateRecorderManagerCfg()
+
+    print(f"[DEBUG] Recorders Config Type: {type(env_cfg.recorders)}")
     env_cfg.recorders.dataset_export_dir_path = output_dir
     env_cfg.recorders.dataset_filename = output_file_name
 
@@ -178,11 +199,7 @@ def main():
     )
 
     # create environment
-    env = gym.make(env_name, cfg=env_cfg)
-    from isaaclab_arena.utils.isaaclab_utils.simulation_app import reapply_viewer_cfg
-
-    reapply_viewer_cfg(env)
-    env = env.unwrapped
+    env = gym.make(env_name, cfg=env_cfg).unwrapped
 
     if not isinstance(env, ManagerBasedRLMimicEnv):
         raise ValueError("The environment should be derived from ManagerBasedRLMimicEnv")
@@ -201,42 +218,39 @@ def main():
 
     # reset before starting
     env.reset()
+    if args_cli.enable_cameras:
+        print(f"[DEBUG] Env obs_buf keys: {list(env.obs_buf.keys())}")
+
+    # Setup and run async data generation
+    async_components = setup_async_generation(
+        env=env,
+        num_envs=args_cli.num_envs,
+        input_file=args_cli.input_file,
+        success_term=success_term,
+        pause_subtask=args_cli.pause_subtask,
+    )
 
     try:
-        # Setup and run async data generation
-        async_components = setup_async_generation(
-            env=env,
-            num_envs=args_cli.num_envs,
-            input_file=args_cli.input_file,
-            success_term=success_term,
-            pause_subtask=args_cli.pause_subtask,
-            motion_planners=None,
+        data_gen_tasks = asyncio.ensure_future(asyncio.gather(*async_components["tasks"]))
+        env_loop(
+            env,
+            async_components["reset_queue"],
+            async_components["action_queue"],
+            async_components["info_pool"],
+            async_components["event_loop"],
         )
-
-        try:
-            data_gen_tasks = asyncio.ensure_future(asyncio.gather(*async_components["tasks"]))
-            env_loop(
-                env,
-                async_components["reset_queue"],
-                async_components["action_queue"],
-                async_components["info_pool"],
-                async_components["event_loop"],
-            )
-        except asyncio.CancelledError:
-            print("Tasks were cancelled.")
-        finally:
-            # Cancel all async tasks when env_loop finishes
-            data_gen_tasks.cancel()
-            try:
-                # Wait for tasks to be cancelled
-                async_components["event_loop"].run_until_complete(data_gen_tasks)
-            except asyncio.CancelledError:
-                print("Remaining async tasks cancelled and cleaned up.")
-            except Exception as e:
-                print(f"Error cancelling remaining async tasks: {e}")
+    except asyncio.CancelledError:
+        print("Tasks were cancelled.")
     finally:
-        # Close env after async tasks are done so success_term is never called on a closed env
-        env.close()
+        # Cancel all async tasks when env_loop finishes
+        data_gen_tasks.cancel()
+        try:
+            # Wait for tasks to be cancelled
+            async_components["event_loop"].run_until_complete(data_gen_tasks)
+        except asyncio.CancelledError:
+            print("Remaining async tasks cancelled and cleaned up.")
+        except Exception as e:
+            print(f"Error cancelling remaining async tasks: {e}")
 
 
 if __name__ == "__main__":

@@ -10,10 +10,8 @@ import argparse
 import gymnasium as gym
 import torch
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
-from gr00t.data.embodiment_tags import EmbodimentTag
 from gr00t.policy.gr00t_policy import Gr00tPolicy
 
 from isaaclab_arena.policy.action_chunking import ActionChunkingState
@@ -29,7 +27,6 @@ from isaaclab_arena_gr00t.policy.gr00t_core import (
     load_gr00t_joint_configs,
     load_gr00t_policy_from_config,
 )
-from isaaclab_arena_gr00t.utils.eagle_config_compat import apply_eagle_config_compat
 from isaaclab_arena_gr00t.utils.io_utils import (
     create_config_from_yaml,
     load_gr00t_modality_config_from_file,
@@ -95,6 +92,14 @@ class Gr00tClosedloopPolicy(PolicyBase):
             self.robot_state_joints_config,
         ) = load_gr00t_joint_configs(self.policy_config)
 
+        # Load separate state policy joints config if provided; otherwise reuse policy_joints_config.
+        # Needed when state DOF ≠ action DOF (e.g. Franka: state=9 DOF with 2 gripper fingers,
+        # action=8 DOF with 1 gripper finger).
+        state_policy_path = (
+            self.policy_config.state_policy_joints_config_path or self.policy_config.policy_joints_config_path
+        )
+        self.state_policy_joints_config = load_robot_joints_config_from_yaml(state_policy_path)
+
         # Modality config
         self.modality_configs = load_gr00t_modality_config_from_file(
             self.policy_config.modality_config_path,
@@ -144,42 +149,14 @@ class Gr00tClosedloopPolicy(PolicyBase):
         )
         return parser
 
-    def load_policy_joints_config(self, policy_config_path: Path) -> dict[str, Any]:
-        """Load the GR00T policy joint config from the data config."""
-        return load_robot_joints_config_from_yaml(policy_config_path)
-
-    def load_sim_state_joints_config(self, state_config_path: Path) -> dict[str, Any]:
-        """Load the simulation state joint config from the data config."""
-        return load_robot_joints_config_from_yaml(state_config_path)
-
-    def load_sim_action_joints_config(self, action_config_path: Path) -> dict[str, Any]:
-        """Load the simulation action joint config from the data config."""
-        return load_robot_joints_config_from_yaml(action_config_path)
-
-    def load_policy(self) -> Gr00tPolicy:
-        """Load the dataset, whose iterator will be used as the policy."""
-        assert Path(
-            self.policy_config.model_path
-        ).exists(), f"Dataset path {self.policy_config.dataset_path} does not exist"
-
-        apply_eagle_config_compat()
-
-        return Gr00tPolicy(
-            model_path=self.policy_config.model_path,
-            embodiment_tag=EmbodimentTag[self.policy_config.embodiment_tag],
-            device=self.device,
-            strict=True,
-        )
+    # ------------------------------------------------------------------ #
+    # Public API
+    # ------------------------------------------------------------------ #
 
     def set_task_description(self, task_description: str | None) -> str:
         """Set the language instruction of the task being evaluated."""
         if task_description is None:
             task_description = self.policy_config.language_instruction
-        if not task_description:
-            raise ValueError(
-                "No language instruction provided. Set 'language_instruction' in the job config, "
-                "pass --language_instruction on the CLI, or define 'task_description' on the task class."
-            )
         self.task_description = task_description
         return self.task_description
 
@@ -202,7 +179,7 @@ class Gr00tClosedloopPolicy(PolicyBase):
             task_description=self.task_description,
             policy_config=self.policy_config,
             robot_state_joints_config=self.robot_state_joints_config,
-            policy_joints_config=self.policy_joints_config,
+            policy_joints_config=self.state_policy_joints_config,
             modality_configs=self.modality_configs,
         )
 

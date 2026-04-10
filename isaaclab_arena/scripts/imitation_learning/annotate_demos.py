@@ -36,6 +36,13 @@ parser.add_argument(
     help="File name of the annotated output dataset file.",
 )
 parser.add_argument("--auto", action="store_true", default=False, help="Automatically annotate subtasks.")
+parser.add_argument(
+    "--enable_pinocchio",
+    action="store_true",
+    default=False,
+    help="Enable Pinocchio.",
+)
+
 # Add the example environments CLI args
 # NOTE(alexmillane, 2025.09.04): This has to be added last, because
 # of the app specific flags being parsed after the global flags.
@@ -43,6 +50,11 @@ add_example_environments_cli_args(parser)
 
 # parse the arguments
 args_cli = parser.parse_args()
+
+if args_cli.enable_pinocchio:
+    # Import pinocchio before AppLauncher to force the use of the version installed by IsaacLab and not the one installed by Isaac Sim
+    # pinocchio is required by the Pink IK controllers and the GR1T2 retargeter
+    import pinocchio  # noqa: F401
 
 # launch the simulator
 app_launcher = AppLauncher(args_cli)
@@ -58,8 +70,11 @@ import isaaclab_mimic.envs  # noqa: F401
 
 # Imports have to follow simulation startup.
 
-# Only enables inputs if this script is NOT headless mode
-if not args_cli.headless and not os.environ.get("HEADLESS", 0):
+if args_cli.enable_pinocchio:
+    import isaaclab_mimic.envs.pinocchio_envs  # noqa: F401
+
+# Only enables inputs if this script is NOT headless mode or if LIVESTREAM is enabled
+if (not args_cli.headless and not os.environ.get("HEADLESS", 0)) or os.environ.get("LIVESTREAM"):
     from isaaclab.devices import Se3Keyboard, Se3KeyboardCfg
 
 import isaaclab_tasks  # noqa: F401
@@ -133,12 +148,27 @@ class PreStepSubtaskTermsObservationsRecorderCfg(RecorderTermCfg):
     class_type: type[RecorderTerm] = PreStepSubtaskTermsObservationsRecorder
 
 
+class PreStepCameraObservationsRecorder(RecorderTerm):
+    """Recorder term that records the camera observations in each step."""
+
+    def record_pre_step(self):
+        return "obs", self._env.obs_buf["camera_obs"]
+
+
+@configclass
+class PreStepCameraObservationsRecorderCfg(RecorderTermCfg):
+    """Configuration for the camera observations recorder term."""
+
+    class_type: type[RecorderTerm] = PreStepCameraObservationsRecorder
+
+
 @configclass
 class MimicRecorderManagerCfg(ActionStateRecorderManagerCfg):
     """Mimic specific recorder terms."""
 
     record_pre_step_datagen_info = PreStepDatagenInfoRecorderCfg()
     record_pre_step_subtask_term_signals = PreStepSubtaskTermsObservationsRecorderCfg()
+    record_pre_step_camera_observations = PreStepCameraObservationsRecorderCfg()
 
 
 def main():
@@ -190,11 +220,7 @@ def main():
     env_cfg.recorders.dataset_filename = output_file_name
 
     # create environment from loaded config
-    env = gym.make(env_name, cfg=env_cfg)
-    from isaaclab_arena.utils.isaaclab_utils.simulation_app import reapply_viewer_cfg
-
-    reapply_viewer_cfg(env)
-    env: ManagerBasedRLMimicEnv = env.unwrapped
+    env: ManagerBasedRLMimicEnv = gym.make(env_name, cfg=env_cfg).unwrapped
 
     if not isinstance(env, ManagerBasedRLMimicEnv):
         raise ValueError("The environment should be derived from ManagerBasedRLMimicEnv")
@@ -219,8 +245,8 @@ def main():
     # reset environment
     env.reset()
 
-    # Only enables inputs if this script is NOT headless mode
-    if not args_cli.headless and not os.environ.get("HEADLESS", 0):
+    # Only enables inputs if this script is NOT headless mode or if LIVESTREAM is enabled
+    if (not args_cli.headless and not os.environ.get("HEADLESS", 0)) or os.environ.get("LIVESTREAM"):
         keyboard_interface = Se3Keyboard(Se3KeyboardCfg(pos_sensitivity=0.1, rot_sensitivity=0.1))
         keyboard_interface.add_callback("N", play_cb)
         keyboard_interface.add_callback("B", pause_cb)

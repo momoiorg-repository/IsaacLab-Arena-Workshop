@@ -212,6 +212,7 @@ TABLE OF CONTENTS
 
    pages/example_workflows/imitation_learning/index
    pages/example_workflows/reinforcement_learning_workflows/index
+   pages/example_workflows/franka_pick_and_place/index
 
 .. toctree::
    :maxdepth: 1

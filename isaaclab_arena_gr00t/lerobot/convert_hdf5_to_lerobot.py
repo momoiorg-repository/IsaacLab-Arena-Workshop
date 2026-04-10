@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+import contextlib
 import h5py
 import json
 import multiprocessing as mp
@@ -175,7 +176,7 @@ def get_feature_info(
         Dictionary containing feature information for each column and video.
     """
     policy_joints_config = load_robot_joints_config_from_yaml(config.policy_joints_config_path)
-    # flatten dict of dict into a single dict, perseving the order of the keys
+    # flatten dict of dict into a single dict, preserving the order of the keys
     policy_joints_names = []
     for joint_group in policy_joints_config.keys():
         for joint_name in policy_joints_config[joint_group]:
@@ -199,8 +200,17 @@ def get_feature_info(
         # State & action
         if column in [config.lerobot_keys["state"], config.lerobot_keys["action"]]:
             dof = column_data.shape[1]
-            assert dof == len(policy_joints_names)
-            features[column]["names"] = [f"{policy_joints_names[i]}" for i in range(dof)]
+
+            target_joints_names = policy_joints_names
+            if column == config.lerobot_keys["action"] and config.policy_action_joints_config_path is not None:
+                action_joints_config = load_robot_joints_config_from_yaml(config.policy_action_joints_config_path)
+                target_joints_names = []
+                for joint_group in action_joints_config.keys():
+                    for joint_name in action_joints_config[joint_group]:
+                        target_joints_names.append(joint_name)
+
+            assert dof == len(target_joints_names), f"{column} dof {dof} != {len(target_joints_names)}"
+            features[column]["names"] = [f"{target_joints_names[i]}" for i in range(dof)]
 
     return features
 
@@ -360,7 +370,12 @@ def convert_trajectory_to_df(
 
         # 1.1. Remap the joints from Lab order to the LeRobot-GR00T order
         joints = JointsAbsPosition.from_array(joints, input_joints_config, device="cpu")
-        remapped_joints = remap_sim_joints_to_policy_joints(joints, policy_joints_config)
+
+        current_policy_config = policy_joints_config
+        if key == "action" and config.policy_action_joints_config_path is not None:
+            current_policy_config = load_robot_joints_config_from_yaml(config.policy_action_joints_config_path)
+
+        remapped_joints = remap_sim_joints_to_policy_joints(joints, current_policy_config)
 
         # 1.2. Fill in the missing joints with zeros
         ordered_joints = []
@@ -506,6 +521,7 @@ def convert_hdf5_to_lerobot(config: Gr00tDatasetConfig):
                 trajectory=trajectory, episode_index=episode_index, index_start=total_length, config=config
             )
         except Exception as e:
+            traceback.print_exc()
             print(f"Error loading trajectory {trajectory_id}: {e}")
             continue
 
@@ -526,20 +542,45 @@ def convert_hdf5_to_lerobot(config: Gr00tDatasetConfig):
             "length": length,
         })
         # 2.3. Generate videos/
-        new_video_relpath = config.video_path.format(
-            episode_chunk=episode_chunk, video_key=config.lerobot_keys["video"], episode_index=episode_index
-        )
-        new_video_path = config.lerobot_data_dir / new_video_relpath
-        if config.video_name_lerobot not in video_paths.keys():
-            video_paths[config.video_name_lerobot] = new_video_path
+        camera_mappings = [(config.pov_cam_name_sim, config.lerobot_keys["video"], config.video_name_lerobot)]
+        if config.front_cam_name_sim and "front_video" in config.lerobot_keys:
+            camera_mappings.append(
+                (config.front_cam_name_sim, config.lerobot_keys["front_video"], config.front_video_name_lerobot)
+            )
+        if config.right_cam_name_sim and "right_video" in config.lerobot_keys:
+            camera_mappings.append(
+                (config.right_cam_name_sim, config.lerobot_keys["right_video"], config.right_video_name_lerobot)
+            )
 
-        assert config.pov_cam_name_sim in trajectory["camera_obs"]
+        for sim_cam_name, lerobot_video_key, video_name_lerobot in camera_mappings:
+            new_video_relpath = config.video_path.format(
+                episode_chunk=episode_chunk, video_key=lerobot_video_key, episode_index=episode_index
+            )
+            new_video_path = config.lerobot_data_dir / new_video_relpath
+            if video_name_lerobot not in video_paths.keys():
+                video_paths[video_name_lerobot] = new_video_path
 
-        frames = np.array(trajectory["camera_obs"][config.pov_cam_name_sim])
-        # remove last frame due to how Lab reports observations
-        frames = frames[:-1]
-        assert len(frames) == length
-        queue.put((new_video_path, frames, config.fps, "image"))
+            # generate_dataset.py stores cameras at trajectory["camera_obs"]
+            # annotate_demos.py stores cameras at trajectory["obs"] (nested with other obs)
+            if "camera_obs" in trajectory:
+                cam_root = trajectory["camera_obs"]
+            elif "obs" in trajectory and sim_cam_name in trajectory["obs"]:
+                cam_root = trajectory["obs"]
+            else:
+                raise KeyError(
+                    f"Camera '{sim_cam_name}' not found in trajectory '{trajectory_id}'. "
+                    f"Trajectory keys: {list(trajectory.keys())}. "
+                    "Did you record/annotate/generate with --enable_cameras?"
+                )
+            assert (
+                sim_cam_name in cam_root
+            ), f"'{sim_cam_name}' not found in camera group. Available keys: {list(cam_root.keys())}"
+
+            frames = np.array(cam_root[sim_cam_name])
+            # remove last frame due to how Lab reports observations
+            frames = frames[:-1]
+            assert len(frames) == length
+            queue.put((new_video_path, frames, config.fps, "image"))
 
         if example_data is None:
             example_data = df_ret_dict
@@ -594,7 +635,7 @@ def convert_hdf5_to_lerobot(config: Gr00tDatasetConfig):
             if worker.is_alive():
                 worker.terminate()
                 worker.join()
-        if not hdf5_handler.closed:
+        with contextlib.suppress(Exception):
             hdf5_handler.close()
         raise  # Re-raise the exception after cleanup
 
