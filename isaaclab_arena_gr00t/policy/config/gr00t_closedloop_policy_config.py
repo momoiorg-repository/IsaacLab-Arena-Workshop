@@ -95,13 +95,6 @@ class Gr00tClosedloopPolicyConfig:
         default_factory=lambda: ["robot_head_cam_rgb"],
         metadata={"description": "Names of the POV cameras of the robot in simulation."},
     )
-    front_cam_name_sim: str = field(
-        default=None, metadata={"description": "Name of the front camera of the environment in simulation."}
-    )
-    joint_pos_obs_key: str = field(
-        default="robot_joint_pos",
-        metadata={"description": "Key for joint position in the observation['policy'] dict."},
-    )
     # Closed loop specific parameters
     action_chunk_length: int = field(
         default=16,
