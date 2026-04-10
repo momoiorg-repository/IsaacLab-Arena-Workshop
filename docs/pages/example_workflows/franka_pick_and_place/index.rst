@@ -1,7 +1,7 @@
 Franka Pick and Place Task
 ==========================
 
-.. image:: ../../../images/franka_pick_and_place.png
+.. image:: ../../../images/franka_pick_and_place.gif
    :width: 80%
    :align: center
 

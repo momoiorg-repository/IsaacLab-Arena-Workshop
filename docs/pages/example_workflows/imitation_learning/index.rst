@@ -10,6 +10,7 @@ Currently, the following imitation learning workflow examples are provided:
 * :doc:`G1 Loco-Manipulation Box Pick and Place Task <../locomanipulation/index>`
 * :doc:`GR1 Open Microwave Door Task <../static_manipulation/index>`
 * :doc:`GR1 Sequential Pick & Place and Close Door Task <../sequential_static_manipulation/index>`
+* :doc:`Franka Pick and Place Task <../franka_pick_and_place/index>`
 
 
 GR00T Container
@@ -32,3 +33,4 @@ Not every step requires this container — the workflow pages will tell you when
    ../locomanipulation/index
    ../static_manipulation/index
    ../sequential_static_manipulation/index
+   ../franka_pick_and_place/index
