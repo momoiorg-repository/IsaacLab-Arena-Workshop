@@ -32,3 +32,19 @@ FRANKA_PANDA_ASSEMBLY_HIGH_PD_CFG.actuators["panda_hand"].damping = 30.0
 
 # Set initial position for tabletop tasks
 FRANKA_PANDA_ASSEMBLY_HIGH_PD_CFG.init_state.pos = (0.0, 0.0, 0.0)
+
+
+# ===========================================================================================
+# Franka Panda configuration for V-DASH (scripted pick + force-control insertion).
+#
+# Keeps the *stiffer* HIGH_PD gains (400) for practical free-space speed during pick/transport —
+# the assembly cfg above softens to 150, which makes the arm too slow (~0.04 m/s) to finish a
+# pick+insert inside the episode and tanks eval throughput. Insertion compliance is provided by the
+# controller's force-limited press + spiral search (configs/vdash/controllers.yaml), not a soft arm.
+# Contact sensors are enabled (peg/finger ContactSensors) and base-link gravity disabled for control
+# stability (HIGH_PD already disables gravity; set explicitly for clarity).
+# ===========================================================================================
+FRANKA_PANDA_VDASH_CFG = FRANKA_PANDA_HIGH_PD_CFG.copy()
+FRANKA_PANDA_VDASH_CFG.spawn.activate_contact_sensors = True
+FRANKA_PANDA_VDASH_CFG.spawn.rigid_props.disable_gravity = True
+FRANKA_PANDA_VDASH_CFG.init_state.pos = (0.0, 0.0, 0.0)

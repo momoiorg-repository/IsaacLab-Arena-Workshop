@@ -1,0 +1,59 @@
+# Gr00tDatasetConfig for V-DASH pick→handoff (Franka panda, M9 recorder output).
+# Converts datasets/vdash/vla_pick_handoff.hdf5 -> GR00T-LeRobot at
+#   datasets/vdash/vla_pick_handoff/lerobot
+# Data layout verified: obs/joint_pos (9) state, processed_actions (8) joint-space action,
+# obs/{wrist,left,right}_cam_rgb (256x256x3). Reuses the Franka embodiment configs.
+
+# Root directory that holds the HDF5 and receives the LeRobot output.
+data_root: "/workspaces/isaaclab_arena/datasets/vdash"
+
+# Natural-language instruction (matches the recorder's frozen VLA template, M9).
+language_instruction: "Pick up the peg and move it over the socket."
+task_index: 0
+
+# Recorded HDF5 (output dir is derived: <data_root>/vla_pick_handoff/lerobot).
+hdf5_name: "vla_pick_handoff.hdf5"
+
+# HDF5 field names (from the M9 record_vla_demos.py recorder).
+state_name_sim: "joint_pos"             # data/<demo>/obs/joint_pos  (9-dof)
+action_name_sim: "processed_actions"    # data/<demo>/processed_actions (8-dof joint space)
+pov_cam_name_sim: "wrist_cam_rgb"       # data/<demo>/obs/wrist_cam_rgb
+front_cam_name_sim: "left_cam_rgb"      # data/<demo>/obs/left_cam_rgb
+right_cam_name_sim: "right_cam_rgb"     # data/<demo>/obs/right_cam_rgb
+
+# GR00T-LeRobot field names.
+state_name_lerobot: "observation.state"
+action_name_lerobot: "action"
+video_name_lerobot: "observation.images.ego_view"
+front_video_name_lerobot: "observation.images.left_view"
+right_video_name_lerobot: "observation.images.right_view"
+task_description_lerobot: "annotation.human.task_description"
+
+# Parquet / video.
+chunks_size: 1000
+fps: 30
+
+# File path templates.
+data_path: "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet"
+video_path: "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4"
+
+# Templates / metadata (reuse Franka embodiment).
+modality_template_path: "isaaclab_arena_gr00t/embodiments/franka/modality.json"
+modality_fname: "modality.json"
+episodes_fname: "episodes.jsonl"
+tasks_fname: "tasks.jsonl"
+info_template_path: "isaaclab_arena_gr00t/embodiments/franka/info.json"
+info_fname: "info.json"
+
+# Policy joint ordering (GR00T side).
+policy_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/gr00t_9dof_joint_space.yaml"
+policy_action_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/gr00t_8dof_action_space.yaml"
+robot_type: "franka"
+
+# Sim joint ordering (Lab side).
+action_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/8dof_action_space.yaml"
+state_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/9dof_joint_space.yaml"
+
+# Image size (recorder cameras are 256x256).
+original_image_size: [256, 256, 3]
+target_image_size: [256, 256, 3]

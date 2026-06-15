@@ -1,0 +1,5 @@
+policy,clearance_mm,level,n,success,success_rate,ci95_low,ci95_high,insert_force_median_N,handoff_fired,jsonl
+vdash_scripted,2.0,L0,50,50,1.0,0.9286,1.0,8.614,50,vdash_handoff_grid_vdash_scripted_c2.0_L0_20260613_125700.jsonl
+vdash_scripted,2.0,L1,50,50,1.0,0.9286,1.0,0.214,50,vdash_handoff_grid_vdash_scripted_c2.0_L1_20260613_130105.jsonl
+vdash_scripted,2.0,L2,50,49,0.98,0.895,0.9965,0.603,50,vdash_handoff_grid_vdash_scripted_c2.0_L2_20260613_130513.jsonl
+vdash_scripted,2.0,L3,50,49,0.98,0.895,0.9965,0.603,50,vdash_handoff_grid_vdash_scripted_c2.0_L3_20260613_131009.jsonl
