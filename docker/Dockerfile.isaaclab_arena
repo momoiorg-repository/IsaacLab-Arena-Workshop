@@ -7,6 +7,9 @@ USER root
 
 # GR00T Policy Build Arguments, these are only used if INSTALL_GROOT is true
 ARG INSTALL_GROOT=false
+# Which GR00T dep installer to run: install_gr00t_deps.sh (N1.6, default) or
+# install_gr00t_deps_n17.sh (N1.7). Both build standalone from the Isaac Sim base.
+ARG GROOT_DEPS_SCRIPT=install_gr00t_deps.sh
 
 ARG WORKDIR="/workspace"
 ENV WORKDIR=${WORKDIR}
@@ -102,16 +105,16 @@ RUN if [ "$INSTALL_GROOT" = "true" ]; then \
 # Copy GR00T
 COPY ./submodules/Isaac-GR00T ${WORKDIR}/submodules/Isaac-GR00T
 # Copy GR00T dependencies installation script
-COPY docker/setup/install_gr00t_deps.sh /tmp/install_gr00t_deps.sh
-RUN chmod +x /tmp/install_gr00t_deps.sh
-# Install GR00T dependencies if requested
+COPY docker/setup/install_gr00t_deps.sh docker/setup/install_gr00t_deps_n17.sh /tmp/
+RUN chmod +x /tmp/install_gr00t_deps*.sh
+# Install GR00T dependencies if requested (GROOT_DEPS_SCRIPT selects N1.6 vs N1.7)
 RUN if [ "$INSTALL_GROOT" = "true" ]; then \
-  /tmp/install_gr00t_deps.sh; \
+  /tmp/${GROOT_DEPS_SCRIPT}; \
   else \
   echo "Skipping GR00T installation"; \
   fi && \
   # Clean up installation scripts
-  rm -f /tmp/install_gr00t_deps.sh
+  rm -f /tmp/install_gr00t_deps*.sh
 
 # Copy the rest of the files
 COPY *.* ${WORKDIR}/

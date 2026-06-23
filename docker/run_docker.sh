@@ -55,11 +55,11 @@ while getopts ":d:m:e:hn:rn:Rn:vn:gn:bG" OPTION; do
             DOCKER_VERSION_TAG='cuda_gr00t_gn16'
             ;;
         G)
-            # gn17 layers the N1.7 dep delta on the gn16 image (docker/Dockerfile.gn17);
-            # INSTALL_GROOT stays true so the runtime submodule mount (below) is applied.
+            # gn17 = standalone GR00T N1.7 image built from the Isaac Sim base via
+            # install_gr00t_deps_n17.sh (no dependency on the gn16 image).
             INSTALL_GROOT="true"
             DOCKER_VERSION_TAG='cuda_gr00t_gn17'
-            DOCKERFILE='Dockerfile.gn17'
+            GROOT_DEPS_SCRIPT='install_gr00t_deps_n17.sh'
             ;;
         b)
             BREV_MODE=true
@@ -114,6 +114,7 @@ else
         --progress=plain \
         --build-arg WORKDIR="${WORKDIR}" \
         --build-arg INSTALL_GROOT=$INSTALL_GROOT \
+        --build-arg GROOT_DEPS_SCRIPT="${GROOT_DEPS_SCRIPT:-install_gr00t_deps.sh}" \
         -t ${DOCKER_IMAGE_NAME}:${DOCKER_VERSION_TAG} \
         --file $SCRIPT_DIR/${DOCKERFILE:-Dockerfile.isaaclab_arena} \
         $SCRIPT_DIR/..
