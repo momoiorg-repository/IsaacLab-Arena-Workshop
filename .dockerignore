@@ -1,3 +1,11 @@
 **/.mypy_cache
 **/__pycache__
 /.git
+# Large runtime dirs — not COPY'd into the image; excluded so the build context stays small
+# (datasets+models are ~100GB and are bind-mounted at runtime, not baked into the image).
+/datasets
+/models
+/output
+/eval
+/logs
+**/*.hdf5

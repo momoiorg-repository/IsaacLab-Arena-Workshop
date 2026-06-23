@@ -24,7 +24,7 @@ FORCE_REBUILD=false
 # Whether to use the brev entrypoint
 BREV_MODE=false
 
-while getopts ":d:m:e:hn:rn:Rn:vn:gn:b" OPTION; do
+while getopts ":d:m:e:hn:rn:Rn:vn:gn:bG" OPTION; do
     case $OPTION in
 
         d)
@@ -54,6 +54,13 @@ while getopts ":d:m:e:hn:rn:Rn:vn:gn:b" OPTION; do
             INSTALL_GROOT="true"
             DOCKER_VERSION_TAG='cuda_gr00t_gn16'
             ;;
+        G)
+            # gn17 layers the N1.7 dep delta on the gn16 image (docker/Dockerfile.gn17);
+            # INSTALL_GROOT stays true so the runtime submodule mount (below) is applied.
+            INSTALL_GROOT="true"
+            DOCKER_VERSION_TAG='cuda_gr00t_gn17'
+            DOCKERFILE='Dockerfile.gn17'
+            ;;
         b)
             BREV_MODE=true
             ;;
@@ -72,7 +79,8 @@ while getopts ":d:m:e:hn:rn:Rn:vn:gn:b" OPTION; do
             echo "  -n <docker name> (Name of the docker image that will be built or used. Default is \"$DOCKER_IMAGE_NAME\".)"
             echo "  -r (Force rebuilding of the docker image.)"
             echo "  -R (Force rebuilding of the docker image, without cache.)"
-            echo "  -g (Install GR00T N1.6 dependencies.)
+            echo "  -g (Install GR00T N1.6 dependencies -> cuda_gr00t_gn16 image.)
+  -G (Install GR00T N1.7 dependencies -> cuda_gr00t_gn17 image.)
   -b (Use brev entrypoint: docker/setup/brev_entrypoint.sh)"
             exit 0
             ;;
@@ -107,7 +115,7 @@ else
         --build-arg WORKDIR="${WORKDIR}" \
         --build-arg INSTALL_GROOT=$INSTALL_GROOT \
         -t ${DOCKER_IMAGE_NAME}:${DOCKER_VERSION_TAG} \
-        --file $SCRIPT_DIR/Dockerfile.isaaclab_arena \
+        --file $SCRIPT_DIR/${DOCKERFILE:-Dockerfile.isaaclab_arena} \
         $SCRIPT_DIR/..
 fi
 

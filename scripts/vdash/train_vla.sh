@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fine-tune GR00T N1.6 on the V-DASH pick->handoff demos (brief v3 VLA training).
+# Fine-tune GR00T N1.7 on the V-DASH pick->handoff demos (brief v3 VLA training).
 #
 # Pipeline:
 #   1. record_vla_demos.py        -> datasets/vdash/vla_pick_handoff.hdf5   (M9)
@@ -8,14 +8,14 @@
 #            --yaml_file isaaclab_arena_gr00t/lerobot/config/vdash_pick_handoff_config.yaml
 #   3. THIS SCRIPT                -> fine-tunes GR00T N1.6 on that dataset.
 #
-# Run INSIDE the GR00T container (built with `./docker/run_docker.sh -g`):
-#   docker exec -u an isaaclab_arena-cuda_gr00t_gn16 bash -lc \
+# Run INSIDE the GR00T N1.7 container (built with `./docker/run_docker.sh -G`):
+#   docker exec -u an isaaclab_arena-cuda_gr00t_gn17 bash -lc \
 #     'cd /workspaces/isaaclab_arena && bash scripts/vdash/train_vla.sh'
 # All knobs are overridable via env vars, e.g.:
 #   MAX_STEPS=20000 GLOBAL_BATCH_SIZE=32 NUM_GPUS=2 bash scripts/vdash/train_vla.sh
 #
 # ── HARDWARE NOTE ──────────────────────────────────────────────────────────────
-# GR00T N1.6 is a 3B VLA and launch_finetune.py loads it in fp32
+# GR00T N1.7 is a 3B VLA and launch_finetune.py loads it in fp32
 # (load_bf16=False, backbone_trainable_params_fp32=True). A full fine-tune needs a
 # large-VRAM GPU (A100/H100-class, ~40GB+). The local RTX 5080 (16GB) will OOM —
 # run this on a bigger GPU / cloud. If you must shrink memory, lower GLOBAL_BATCH_SIZE
@@ -27,11 +27,11 @@ cd "$(dirname "$0")/../.."   # repo root (/workspaces/isaaclab_arena)
 export HDF5_USE_FILE_LOCKING="${HDF5_USE_FILE_LOCKING:-FALSE}"
 
 # ── Paths ───────────────────────────────────────────────────────────────────
-# Base checkpoint to start from. Default: official N1.6 base (HF, may require `huggingface-cli login`).
-# Warm-start alternative (already on disk): models/franka-gr00t-n1-6-cube
-BASE_MODEL_PATH="${BASE_MODEL_PATH:-nvidia/GR00T-N1.6-3B}"
-DATASET_PATH="${DATASET_PATH:-datasets/vdash/vla_pick_handoff/lerobot}"
-OUTPUT_DIR="${OUTPUT_DIR:-models/vdash-gr00t-n1-6-pick-handoff}"
+# Base checkpoint to start from. Default: official N1.7 base (HF, may require `huggingface-cli login`).
+# N1.7 uses the Cosmos-Reason2-2B (Qwen3-VL) backbone, bundled in the checkpoint.
+BASE_MODEL_PATH="${BASE_MODEL_PATH:-nvidia/GR00T-N1.7-3B}"
+DATASET_PATH="${DATASET_PATH:-datasets/vdash/vla_pick_handoff_v4/lerobot}"
+OUTPUT_DIR="${OUTPUT_DIR:-models/vdash-gr00t-n1-7-pick-handoff-v4}"
 MODALITY_CONFIG_PATH="${MODALITY_CONFIG_PATH:-isaaclab_arena_gr00t/embodiments/franka/franka_modality_config.py}"
 EMBODIMENT_TAG="${EMBODIMENT_TAG:-NEW_EMBODIMENT}"   # franka modality registers under NEW_EMBODIMENT
 
@@ -49,7 +49,7 @@ DATALOADER_NUM_WORKERS="${DATALOADER_NUM_WORKERS:-2}"
 NUM_SHARDS_PER_EPOCH="${NUM_SHARDS_PER_EPOCH:-100000}"
 USE_WANDB="${USE_WANDB:-false}"   # set "true" after `wandb login`
 
-# What to fine-tune (matches the franka N1.6 reference run: projector + diffusion head only).
+# What to fine-tune (projector + diffusion head only; revisit for the N1.7 Qwen backbone).
 TUNE_LLM="${TUNE_LLM:-false}"
 TUNE_VISUAL="${TUNE_VISUAL:-false}"
 TUNE_PROJECTOR="${TUNE_PROJECTOR:-true}"

@@ -67,8 +67,9 @@ if __name__ == "__main__":
     # Standard settings
     config.model.load_bf16 = False # Explicitly False as requested
     config.model.reproject_vision = False
-    config.model.eagle_collator = True
-    config.model.model_name = "nvidia/Eagle-Block2A-2B-v2"
+    # N1.7: the model defaults to Gr00tN1d7Config (Cosmos-Reason2-2B / Qwen3-VL backbone). Do NOT set
+    # the N1.6 Eagle backbone (model_name) or eagle_collator (the field no longer exists) — let the
+    # Gr00tN1d7Config defaults apply; the backbone weights come from start_from_checkpoint (N1.7-3B).
     config.model.backbone_trainable_params_fp32 = True
     config.model.use_relative_action = True
 
@@ -86,7 +87,7 @@ if __name__ == "__main__":
     config.training.max_steps = ft_config.max_steps
     config.training.weight_decay = ft_config.weight_decay
     config.training.warmup_ratio = ft_config.warmup_ratio
-    config.training.wandb_project = "finetune-gr00t-n1d6"
+    config.training.wandb_project = "finetune-gr00t-n1d7"
 
     config.data.shard_size = ft_config.shard_size
     config.data.episode_sampling_rate = ft_config.episode_sampling_rate

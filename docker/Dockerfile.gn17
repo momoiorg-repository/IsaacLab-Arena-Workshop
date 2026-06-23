@@ -1,0 +1,30 @@
+# GR00T N1.7 image (cuda_gr00t_gn17).
+#
+# Built by LAYERING the N1.7 dependency delta on top of the known-good N1.6 image
+# (cuda_gr00t_gn16) instead of recompiling from the Isaac Sim base. The from-base path fails when
+# building flash-attn (torch can't import: libcusparseLt.so.0 missing in the build env), and gn16
+# already ships a working torch 2.7.0 + flash-attn 2.7.4.post1 + CUDA — so we reuse all of it and only
+# add what N1.7 (Cosmos-Reason2-2B / Qwen3-VL backbone) needs.
+#
+# N1.7 code comes from the Isaac-GR00T submodule (now at n1.7-release), which is bind-mounted at
+# runtime over the gn16-baked copy; the editable `gr00t` install resolves to it. gn16 is untouched.
+#
+# Build:  docker build -t isaaclab_arena:cuda_gr00t_gn17 -f docker/Dockerfile.gn17 .
+ARG BASE_IMAGE=isaaclab_arena:cuda_gr00t_gn16
+FROM ${BASE_IMAGE}
+
+# transformers 4.51.3 -> 4.57.3 (Qwen3-VL support); let pip resolve its deps (tokenizers, etc.).
+# Plus N1.7's new pure-python imports. gymnasium / torch / flash-attn are left at gn16 versions.
+RUN /isaac-sim/python.sh -m pip install \
+      transformers==4.57.3 \
+      datasets==3.6.0 \
+      msgpack==1.1.0 \
+      msgpack-numpy==0.4.8 \
+      termcolor==3.2.0 \
+      jsonlines==4.0.0 \
+      pyzmq==27.0.1 \
+      gitpython==3.1.46 \
+      scipy==1.15.3
+
+RUN echo "GR00T N1.7 layer installed on $(cat /etc/hostname)" \
+ && /isaac-sim/python.sh -c "import transformers; print('transformers', transformers.__version__)"
