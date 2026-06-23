@@ -39,3 +39,9 @@ info_fname: "info.json"
 policy_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/gr00t_9dof_joint_space.yaml"
 policy_action_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/gr00t_8dof_action_space.yaml"
 robot_type: "franka"
+
+action_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/8dof_action_space.yaml"
+state_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/9dof_joint_space.yaml"
+
+original_image_size: [256, 256, 3]
+target_image_size: [256, 256, 3]
