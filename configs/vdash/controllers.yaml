@@ -78,10 +78,32 @@ insertion:
   rcc_rot_gain: 0.0             # rad/N tip rotation toward Fxy (available; unused — see above)
   rcc_rot_max: 0.10             # rad cap on the RCC rotation
 
+  # --- M5a: hop-and-search wedge recovery (F/T based) ---
+  # An (often unobserved) off-axis handoff can wedge the peg at the funnel->bore rim. A full retract
+  # resets the spiral and recreates the SAME wedge, so first try cheap micro-hops: lift to UNLOAD the
+  # wedge + advance the spiral to a NEW xy, staying in PRESS. Escalate to a full retract only after
+  # hop_max fruitless hops. Closes the c=2.0 L2/L3 off-axis-handoff failures (~3.6mm handoff error).
+  use_hop_search: false         # M5a: OFF for c=2.0 — the c=2.0 failures are geometric marginality
+                                # (systematic ~2mm handoff bias at the 2mm clearance limit), NOT
+                                # wedges, so hops add disturbance and hurt the marginal case. Hops are
+                                # the right tool for genuine wedges (c<=1.0 cliff); keep available.
+  hop_lift_m: 0.004             # m the tip target is raised per hop to unload the rim wedge
+  hop_after: 120                # PRESS steps stuck (no depth progress) before a hop; doubles as the
+                                # inter-hop cooldown (stuck_timer reset on each hop). MUST exceed the
+                                # spiral sweep time (~130 steps to grow to spiral_radius_max) so a
+                                # normal search is NOT pre-empted — matches the proven retry_after_steps
+                                # that held L0 at 100%; only a genuine wedge (spiral already failed) hops.
+  hop_max: 5                    # consecutive fruitless hops before escalating to a full retract
+  hop_spiral_step: 0.0015       # m the spiral radius is bumped per hop (explore a new xy on re-press)
+  hop_az_step: 2.39996          # rad the spiral azimuth jumps per hop (~137.5 deg golden angle so
+                                # successive hops fan out around the mouth instead of repeating)
+
   # --- jam / retry (F/T based, replaces the old peg-tilt trigger) ---
-  jam_force: 12.0               # N lateral binding (pre-capture) that triggers a retract/retry
+  jam_force: 12.0               # N lateral binding (pre-capture); retry guard when use_hop_search is
+                                # off (with hops on, recovery is driven by the stuck timer)
   retry_after_steps: 120        # PRESS steps without depth progress -> retract to SETTLE and retry
-  max_retries: 6                # max re-attempts before giving up (-> insertion_failed)
+                                # (only used when use_hop_search is off)
+  max_retries: 6                # max full-retract re-attempts before giving up (-> insertion_failed)
 
   # --- misc ---
   fine_max_pos_step: 0.003      # EE clamp during settle/press — gentle, avoids ramming the rim (m/step)

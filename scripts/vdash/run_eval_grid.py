@@ -39,6 +39,45 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")
 _DEFAULT_CFG = os.path.join(_REPO_ROOT, "configs", "vdash", "eval_grid.yaml")
 _POLICY_RUNNER = os.path.join(_REPO_ROOT, "isaaclab_arena", "evaluation", "policy_runner.py")
 
+# GR00T VLA front-end policies. Referenced by dotted import path (lazy — keeps the gr00t dependency
+# out of the base package) and run in the `franka_joint` joint-action env with cameras + the
+# closed-loop config. The short key is the grid/run-tag name; vdash_scripted etc. need none of this.
+_VLA_POLICIES = {
+    "vdash_vla": {
+        "policy_type": "isaaclab_arena.policy.vdash_vla_policy.VDashVLAPolicy",
+        "config": "isaaclab_arena_gr00t/policy/config/vdash_pick_insert_gr00t_closedloop_config.yaml",
+    },
+    # v3 = GR00T fine-tuned on the square-peg + yaw-aligned-grasp dataset (same policy class, v3 ckpt).
+    "vdash_vla_v3": {
+        "policy_type": "isaaclab_arena.policy.vdash_vla_policy.VDashVLAPolicy",
+        "config": "isaaclab_arena_gr00t/policy/config/vdash_pick_insert_gr00t_closedloop_v3_config.yaml",
+    },
+    # v4 = GR00T N1.7 fine-tuned on the v4 dataset (same policy class, N1.7 ckpt). Needs the gn17
+    # container (isaaclab_arena-cuda_gr00t_gn17), not gn16.
+    "vdash_vla_v4": {
+        "policy_type": "isaaclab_arena.policy.vdash_vla_policy.VDashVLAPolicy",
+        "config": "isaaclab_arena_gr00t/policy/config/vdash_pick_insert_gr00t_closedloop_v4_config.yaml",
+    },
+    # v4_28000 = same v4 run, trained longer (step-28000 checkpoint). gn17 container.
+    "vdash_vla_v4_28000": {
+        "policy_type": "isaaclab_arena.policy.vdash_vla_policy.VDashVLAPolicy",
+        "config": "isaaclab_arena_gr00t/policy/config/vdash_pick_insert_gr00t_closedloop_v4_28000_config.yaml",
+    },
+    # v5_vision = v4 dataset re-trained with the vision encoder unfrozen (TUNE_VISUAL=true), to test
+    # whether the v4 peg-mislocalization (vision bottleneck) lifts. gn17 container.
+    "vdash_vla_v5_vision": {
+        "policy_type": "isaaclab_arena.policy.vdash_vla_policy.VDashVLAPolicy",
+        "config": "isaaclab_arena_gr00t/policy/config/vdash_pick_insert_gr00t_closedloop_v5_vision_config.yaml",
+    },
+    # v6_recovery = FROZEN-ViT N1.7 fine-tuned on the v5-recovery handoff set RE-RECORDED with the
+    # camera fix (MOVING frames — all prior datasets trained on a single frozen reset frame). First
+    # eval where both record + eval paths feed live frames; the real test of the frozen-frames fix.
+    "vdash_vla_v6_recovery": {
+        "policy_type": "isaaclab_arena.policy.vdash_vla_policy.VDashVLAPolicy",
+        "config": "isaaclab_arena_gr00t/policy/config/vdash_pick_insert_gr00t_closedloop_v6_recovery_config.yaml",
+    },
+}
+
 
 def _cstr(c: float) -> str:
     """Match the clearance token the env bakes into the log filename (``c2.0``, ``c0.25``)."""
@@ -86,17 +125,24 @@ def run_cell(args, policy: str, c: float, level: str) -> str | None:
             print(f"[grid] skip (resume): {policy} c={c} {level}  ->  {os.path.basename(done)}")
             return done
 
+    vla = _VLA_POLICIES.get(policy)
+    policy_type = vla["policy_type"] if vla else policy
+    pre_env = ["--policy_config_yaml_path", vla["config"], "--enable_cameras"] if vla else []
+    post_env = ["--embodiment", "franka_joint"] if vla else []
     cmd = [
         args.python, _POLICY_RUNNER,
-        "--policy_type", policy,
+        "--policy_type", policy_type,
         "--num_episodes", str(args.num_episodes),
-        "--num_envs", str(args.num_envs),
+        # VLA closed-loop renders non-tiled cameras -> single env; scripted baselines can batch.
+        "--num_envs", "1" if vla else str(args.num_envs),
         "--seed", str(args.seed),
+        *pre_env,
         args.env,
         "--clearance", _cstr(c),
         "--level", level,
         "--log_dir", args.log_dir,
         "--run_tag", _run_tag(policy),
+        *post_env,
     ]
     env = dict(os.environ)
     env.pop("DISPLAY", None)  # headless fast-start (memory: unset DISPLAY ~12s vs ~7min)

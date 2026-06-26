@@ -12,11 +12,13 @@ after reset.
 
 from __future__ import annotations
 
+import os
+
 import torch
 
 from isaaclab.utils.math import quat_apply
 
-from isaaclab_arena.controllers.ee_control import ee_pose_action, level_to_down, pos_reached, read_ee_pose
+from isaaclab_arena.controllers.ee_control import ee_pose_action, pos_reached, read_ee_pose
 
 # phase codes
 APPROACH, DESCEND, CLOSE, LIFT, TRANSPORT, DONE = range(6)
@@ -67,12 +69,15 @@ class ScriptedPick:
     def step(self, env):
         """Return (action (N,7), finished (N,) bool)."""
         self._ensure(env)
-        _, cur_quat = read_ee_pose(env)
         cap = self.need_capture
         if cap.any():
-            # hold the gripper exactly straight-down so the grasped peg stays vertical
-            q_down = level_to_down(cur_quat)
-            self.q_hold = torch.where(cap.unsqueeze(-1), q_down, self.q_hold)
+            # Grasp straight down at a FIXED yaw (no peg-yaw alignment). The cylindrical grip is
+            # yaw-symmetric, so wrist yaw is irrelevant to the grasp; holding a constant wrist keeps the
+            # recorded demos position-only — no peg-yaw -> wrist coupling for the VLA to have to perceive
+            # (that coupling, from the old square-peg yaw-align, made the data unlearnable -> 0% grasp).
+            q_down0 = torch.zeros_like(self.q_hold)
+            q_down0[:, 1] = 1.0  # (w,x,y,z)=(0,1,0,0): gripper approach axis points exactly world -z
+            self.q_hold = torch.where(cap.unsqueeze(-1), q_down0, self.q_hold)
             self.need_capture = self.need_capture & ~cap
 
         gp = self._grasp_point(env)

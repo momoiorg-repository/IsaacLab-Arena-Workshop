@@ -42,7 +42,7 @@ Sources:
 | `solver_velocity_iteration_count` | 1 | all |
 | `max_depenetration_velocity` | 5.0 | all |
 | `max_contact_impulse` | 1e32 | all |
-| `collision_props.contact_offset` | **0.005** | all |
+| `collision_props.contact_offset` | **0.0002** (V-DASH; Factory ref 0.005) | all |
 | `collision_props.rest_offset` | **0.0** | all |
 | `disable_gravity` | **held(peg)=True**, fixed(hole)=False, robot=True | held floats in gripper |
 | asset surface friction | **0.75** | peg, hole, robot fingerpad (`*AssetCfg.friction`) |
@@ -109,8 +109,12 @@ Operational-space impedance controller (the reusable core for `insertion_control
 
 The existing `assembly_env_cfg_callback` currently uses **dt=1/60, decimation=2** and lower
 iteration counts — **not FORGE-grade**. M1 introduces `vdash_assembly_env_cfg_callback` applying
-the §1–§2 values (dt=1/120, pos_iter=192, contact_offset=0.005, rest_offset=0.0,
+the §1–§2 values (dt=1/120, pos_iter=192, contact_offset=0.0002, rest_offset=0.0,
 friction=1.0/asset-0.75, gpu_max_num_partitions=1), and wires ContactSensors per §4.
+
+> **contact_offset note:** the runtime uses **0.0002 m** (`configs/vdash/assets.yaml:26`), not Factory's
+> 0.005 — the 5 mm Factory offset exceeds the tightest clearance (0.25 mm) and blocks bore entry. The
+> deviation is deliberate; this doc lists the V-DASH value with the Factory reference for provenance.
 
 ---
 

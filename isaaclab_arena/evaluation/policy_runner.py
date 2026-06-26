@@ -80,10 +80,23 @@ def rollout_policy(
         num_episodes_completed = 0
         num_steps_completed = 0
 
+        uenv = env.unwrapped
+        # Camera render fix: on this box a standalone sim.render() (what ManagerBasedRLEnv.step uses)
+        # does NOT refresh the RTX camera sensors — only a render-coupled physics step does. Without
+        # this the policy is fed the frozen reset frame every step (see record_vla_demos for the same
+        # fix). Gated on RTX sensors so non-camera evals are untouched; keeps eval cadence consistent
+        # with the recording (which also pumps one render-step per control step).
+        cam_eval = uenv.sim.has_rtx_sensors()
+
         while True:
             with torch.inference_mode():
                 actions = policy.get_action(env, obs)
                 obs, _, terminated, truncated, _ = env.step(actions)
+                if cam_eval:
+                    uenv.sim.step(render=True)
+                    uenv.scene.update(uenv.physics_dt)
+                    uenv.obs_buf = uenv.observation_manager.compute()
+                    obs = uenv.obs_buf
                 if terminated.any() or truncated.any():
                     # Only reset policy for those envs that are terminated or truncated
                     print(

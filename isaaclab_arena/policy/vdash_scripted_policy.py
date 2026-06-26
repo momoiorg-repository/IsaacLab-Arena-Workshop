@@ -47,13 +47,16 @@ class VDashScriptedPolicy(PolicyBase):
         self._in_insertion: torch.Tensor | None = None
         self._m7_offset: torch.Tensor | None = None  # (N,2) M7 lateral offset (m)
         self._m7_tilt: torch.Tensor | None = None    # (N,2) M7 lean = θ·(cos az, sin az)
+        self._m7_recover: bool = False               # release the hold at PRESS entry (recovery basin)
         self._debug = bool(os.environ.get("VDASH_DEBUG"))
         self._step = 0
 
-    def set_m7(self, offset_xy: torch.Tensor, tilt_vec: torch.Tensor) -> None:
-        """E4/M7 harness: hold the insertion at a per-env offset (m) + lean (rad·dir); applied each step."""
+    def set_m7(self, offset_xy: torch.Tensor, tilt_vec: torch.Tensor, recover: bool = False) -> None:
+        """E4/M7 harness: hold the insertion at a per-env offset (m) + lean (rad·dir); applied each step.
+        recover=True → deliver the perturbed handoff then release the hold at PRESS (recovery basin)."""
         self._m7_offset = offset_xy
         self._m7_tilt = tilt_vec
+        self._m7_recover = recover
 
     # ------------------------------------------------------------------ setup
     def _ensure(self, env):
@@ -76,10 +79,35 @@ class VDashScriptedPolicy(PolicyBase):
     def get_action(self, env: gym.Env, observation: GymSpacesDict) -> torch.Tensor:
         self._ensure(env)
         if self._m7_offset is not None:
-            self._ins.set_m7(self._m7_offset, self._m7_tilt)
+            self._ins.set_m7(self._m7_offset, self._m7_tilt, recover=self._m7_recover)
         pick_action, pick_finished = self._pick.step(env)
         # latch into insertion once the pick reports finished (the handoff)
         self._in_insertion = self._in_insertion | pick_finished
+        if os.environ.get("VDASH_GRASP_DIAG"):  # grasp-quality diag (mirror of vdash_vla_policy)
+            import math
+
+            from isaaclab.utils.math import quat_apply
+
+            from isaaclab_arena.controllers.ee_control import read_ee_pose
+
+            task = env.unwrapped.cfg.isaaclab_arena_env.task
+            pegd = env.unwrapped.scene[task.names["peg"]].data
+            robot = env.unwrapped.scene[task.names["robot"]]
+            ep, eq = read_ee_pose(env)
+            ee_pos, ee_quat = ep[0], eq[0]
+            zloc = torch.tensor([0.0, 0.0, 1.0], device=ee_quat.device)
+            peg_axis = quat_apply(pegd.root_quat_w[0], zloc)
+            ee_axis = quat_apply(ee_quat, zloc)
+            ingrip_tilt = math.degrees(math.acos(float(torch.dot(peg_axis, ee_axis).abs().clamp(max=1.0))))
+            rel = pegd.root_pos_w[0, :3] - ee_pos
+            lat_mm = float(torch.norm(rel - torch.dot(rel, ee_axis) * ee_axis)) * 1000.0
+            peg_speed = float(torch.norm(pegd.root_lin_vel_w[0]))
+            grip = float(robot.data.joint_pos[0, -2:].abs().sum())
+            if not getattr(self, "_gd_handoff_logged", False) and bool(self._in_insertion[0]):
+                self._gd_handoff_logged = True
+                print(f"[graspdiag] pol=scripted ep={getattr(self,'_gd_ep',0)} HANDOFF "
+                      f"ingrip_tilt={ingrip_tilt:.1f}deg lat={lat_mm:.1f}mm peg_speed={peg_speed:.3f} "
+                      f"grip={grip:.3f}", flush=True)
         ins_action = self._ins.step(env, active=self._in_insertion)
         action = torch.where(self._in_insertion.unsqueeze(-1), ins_action, pick_action)
 
@@ -96,6 +124,9 @@ class VDashScriptedPolicy(PolicyBase):
         idx = slice(None) if env_ids is None else env_ids
         self._in_insertion[idx] = False
         self._step = 0
+        if os.environ.get("VDASH_GRASP_DIAG"):
+            self._gd_ep = getattr(self, "_gd_ep", 0) + 1
+            self._gd_handoff_logged = False
 
     # ------------------------------------------------------------------ debug
     def _dbg(self, env):

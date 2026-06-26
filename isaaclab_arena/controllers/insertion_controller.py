@@ -58,12 +58,20 @@ class InsertionController:
         self.m7_active = False
         self.m7_offset = None    # (N,2) lateral offset from the socket axis (m)
         self.m7_tilt_vec = None  # (N,2) lean = θ(rad) · (cos az, sin az); peg leans along this dir
+        # recover mode: deliver the peg to the offset+tilt at SETTLE (the perturbed handoff), then on
+        # PRESS entry RELEASE the hold so the controller recenters on the true axis with q_hold + the
+        # configured RCC/spiral compliance. This maps the *recovery* basin (what the controller can pull
+        # back from a perturbed handoff) — the faithful E4 convergence zone, vs the held static-tolerance
+        # map (recover=False). Default off → the held map and all non-m7 paths are unchanged.
+        self.m7_recover = False
 
-    def set_m7(self, offset_xy: torch.Tensor, tilt_vec: torch.Tensor):
-        """Enable the M7 straight-press mode with per-env offset (m) and lean (rad·dir)."""
+    def set_m7(self, offset_xy: torch.Tensor, tilt_vec: torch.Tensor, recover: bool = False):
+        """Enable M7 with per-env offset (m) and lean (rad·dir). recover=True → release the hold at
+        PRESS entry so the controller recenters on the true axis (recovery basin)."""
         self.m7_active = True
         self.m7_offset = offset_xy
         self.m7_tilt_vec = tilt_vec
+        self.m7_recover = recover
 
     def _ensure(self, env):
         if self.phase is not None:
@@ -77,6 +85,7 @@ class InsertionController:
         self.spiral_th = torch.zeros(n, device=dev)
         self.best_depth = torch.full((n,), -1.0, device=dev)   # deepest tip reached this attempt
         self.stuck_timer = torch.zeros(n, dtype=torch.long, device=dev)
+        self.hop_count = torch.zeros(n, dtype=torch.long, device=dev)   # hop-and-search hops this attempt
         self.attempts = torch.zeros(n, dtype=torch.long, device=dev)
         self.q_hold = torch.zeros(n, 4, device=dev)
         self.q_hold[:, 0] = 1.0
@@ -84,6 +93,7 @@ class InsertionController:
         self.prev_tip = torch.zeros(n, 3, device=dev)
         self.have_prev = False
         self.gave_up = torch.zeros(n, dtype=torch.bool, device=dev)
+        self.m7_released = torch.zeros(n, dtype=torch.bool, device=dev)  # recover mode: hold dropped at PRESS
 
     def reset(self, env_ids=None):
         if self.phase is None:
@@ -96,9 +106,12 @@ class InsertionController:
         self.spiral_th[idx] = 0.0
         self.best_depth[idx] = -1.0
         self.stuck_timer[idx] = 0
+        self.hop_count[idx] = 0
         self.attempts[idx] = 0
         self.need_capture[idx] = True
         self.gave_up[idx] = False
+        if hasattr(self, "m7_released"):
+            self.m7_released[idx] = False
         self.have_prev = False
 
     def step(self, env, active: torch.Tensor):
@@ -124,7 +137,16 @@ class InsertionController:
         m7 = self.m7_active
         # In M7 the controller works the peg toward a held offset point (axis + offset); normally it
         # works toward the socket axis. Lateral error and all xy targets are taken w.r.t. this center.
-        center_xy = axis_xy + self.m7_offset if m7 else axis_xy
+        # recover mode: once released (at PRESS entry) the effective offset/lean drop to zero so the
+        # controller recenters on the true axis (axis_xy) and presses upright (recovery basin).
+        if m7 and self.m7_recover:
+            held = (~self.m7_released).unsqueeze(-1).float()
+            m7_offset_eff = self.m7_offset * held
+            m7_tilt_eff = self.m7_tilt_vec * held
+        else:
+            m7_offset_eff = self.m7_offset
+            m7_tilt_eff = self.m7_tilt_vec
+        center_xy = axis_xy + m7_offset_eff if m7 else axis_xy
         lateral = torch.norm(tip[:, :2] - center_xy, dim=-1)
 
         # EE settling speed: finite-difference of the (proprioceptive) tip estimate
@@ -173,17 +195,21 @@ class InsertionController:
         # the tip leans toward the lateral force — converts offset rim contact into slip-into-bore.
         q_cmd = self.q_hold
         if m7:
-            # M7: lean the peg by θ along the offset azimuth (m7_tilt_vec = θ·(cos az, sin az)); the
-            # tilt axis is perpendicular to the lean dir so the downward peg axis tips toward +dir.
-            theta = torch.norm(self.m7_tilt_vec, dim=-1)
-            d = self.m7_tilt_vec / theta.clamp(min=1e-9).unsqueeze(-1)
+            # M7: lean the peg by θ along the offset azimuth (m7_tilt_eff = θ·(cos az, sin az)); the
+            # tilt axis is perpendicular to the lean dir so the downward peg axis tips toward +dir. In
+            # recover mode m7_tilt_eff drops to 0 at release → theta=0 → q_cmd stays q_hold (upright).
+            theta = torch.norm(m7_tilt_eff, dim=-1)
+            d = m7_tilt_eff / theta.clamp(min=1e-9).unsqueeze(-1)
             axis = torch.zeros_like(tip)
             axis[:, 0] = d[:, 1]
             axis[:, 1] = -d[:, 0]
             axis[:, 2] = torch.where(theta < 1e-6, torch.ones_like(theta), torch.zeros_like(theta))
             q_cmd = quat_mul(quat_from_angle_axis(theta, axis), self.q_hold)
         rot_gain = c.get("rcc_rot_gain", 0.0)
-        if rot_gain > 0.0 and not m7:
+        # RCC rotation runs on the normal path (not m7) and on the m7 *recover* path (after release,
+        # to straighten a perturbed handoff). It stays OFF during the held-m7 map so that map is purely
+        # geometric. The do_rot mask below further gates it to PRESS ∧ ~captured.
+        if rot_gain > 0.0 and (not m7 or self.m7_recover):
             fxy3 = torch.cat([fxy, torch.zeros_like(fxy[:, :1])], dim=-1)
             zaxis = torch.zeros_like(fxy3)
             zaxis[:, 2] = 1.0
@@ -221,11 +247,16 @@ class InsertionController:
         else:
             ready = (lateral < align_xy_tol) & ((tip[:, 2] - settle_z).abs() < c.get("settle_z_tol_fast", 0.006))
         to_press = a & (phase == SETTLE) & ready
+        # recover mode: the perturbed handoff has been delivered (peg settled at offset+tilt) — release
+        # the hold so PRESS recenters on the true axis and straightens (RCC) the peg.
+        if self.m7_active and self.m7_recover:
+            self.m7_released = self.m7_released | to_press
         self.z_press = torch.where(to_press, press_entry_z, self.z_press)
         self.spiral_r = torch.where(to_press, torch.zeros_like(self.spiral_r), self.spiral_r)
         self.spiral_th = torch.where(to_press, torch.zeros_like(self.spiral_th), self.spiral_th)
         self.best_depth = torch.where(to_press, torch.full_like(self.best_depth, -1.0), self.best_depth)
         self.stuck_timer = torch.where(to_press, torch.zeros_like(self.stuck_timer), self.stuck_timer)
+        self.hop_count = torch.where(to_press, torch.zeros_like(self.hop_count), self.hop_count)
         self.timer = torch.where(to_press, torch.zeros_like(self.timer), self.timer)
         self.phase = torch.where(to_press, torch.full_like(phase, PRESS), self.phase)
         phase = self.phase
@@ -266,16 +297,40 @@ class InsertionController:
             torch.where(in_press, self.stuck_timer + 1, self.stuck_timer),
         )
 
-        # retry-on-jam (F/T based, §2.1): no depth progress for too long, OR persistent high lateral
-        # binding before capture (the compliant stand-in for the old peg-tilt trigger).
-        retry_after = int(c.get("retry_after_steps", 150))
+        # wedge recovery (F/T based, §2.1). An (often unobserved) off-axis handoff can wedge the peg
+        # at the funnel->bore rim: high lateral binding with no depth progress while still above the
+        # capture depth. A full retract resets the spiral to r=0 and deterministically recreates the
+        # SAME wedge, so first try cheap "hop-and-search" micro-recoveries: lift a few mm to UNLOAD the
+        # wedge and advance the spiral to a NEW xy, staying in PRESS. Only after hop_max fruitless hops
+        # do the full retract -> SETTLE retry; max_retries is the final backstop (-> insertion_failed).
         max_retries = int(c.get("max_retries", 5))
         binding = in_press & (fxy_mag > c.get("jam_force", 12.0)) & ~captured
-        retry = in_press & ((self.stuck_timer > retry_after) | binding) & (self.attempts < max_retries)
+
+        if bool(c.get("use_hop_search", False)):  # default OFF (c2.0 headline); controllers.yaml sets it
+            # the stuck timer climbs whenever the tip makes no depth progress (binding implies stuck),
+            # and is reset on each hop -> its threshold doubles as a cooldown between hops.
+            hop_after = int(c.get("hop_after", 30))
+            hop_max = int(c.get("hop_max", 5))
+            wedged = in_press & ~captured & (self.stuck_timer > hop_after)
+            hop = wedged & (self.hop_count < hop_max)
+            self.z_press = torch.where(hop, self.z_press + c.get("hop_lift_m", 0.004), self.z_press)
+            self.spiral_r = torch.where(
+                hop, torch.clamp(self.spiral_r + c.get("hop_spiral_step", 0.0015), max=c["spiral_radius_max"]),
+                self.spiral_r,
+            )
+            self.spiral_th = torch.where(hop, self.spiral_th + c.get("hop_az_step", 2.39996), self.spiral_th)
+            self.stuck_timer = torch.where(hop, torch.zeros_like(self.stuck_timer), self.stuck_timer)
+            self.hop_count = torch.where(hop, self.hop_count + 1, self.hop_count)
+            retry = wedged & (self.hop_count >= hop_max) & (self.attempts < max_retries)
+        else:
+            retry_after = int(c.get("retry_after_steps", 150))
+            retry = in_press & ((self.stuck_timer > retry_after) | binding) & (self.attempts < max_retries)
+
         self.attempts = torch.where(retry, self.attempts + 1, self.attempts)
         self.spiral_r = torch.where(retry, torch.zeros_like(self.spiral_r), self.spiral_r)
         self.best_depth = torch.where(retry, torch.full_like(self.best_depth, -1.0), self.best_depth)
         self.stuck_timer = torch.where(retry, torch.zeros_like(self.stuck_timer), self.stuck_timer)
+        self.hop_count = torch.where(retry, torch.zeros_like(self.hop_count), self.hop_count)
         self.timer = torch.where(retry, torch.zeros_like(self.timer), self.timer)
         self.phase = torch.where(retry, torch.full_like(phase, SETTLE), self.phase)
         phase = self.phase

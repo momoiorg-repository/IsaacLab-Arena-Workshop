@@ -62,6 +62,9 @@ def main():
     parser.add_argument("--az_deg", type=float, nargs="+", default=[0, 90, 180, 270])
     parser.add_argument("--tilt_deg", type=float, nargs="+", default=[0, 2, 4, 6, 8])
     parser.add_argument("--max_steps", type=int, default=900, help="per-batch step budget")
+    parser.add_argument("--recover", action="store_true",
+                        help="recovery basin: deliver the peg to (r,θ) then release so the controller "
+                             "recenters on the true axis (vs the default held static-tolerance map)")
     parser.add_argument("--out", default=os.path.join(_REPO_ROOT, "results", "vdash", "e4_convergence.csv"))
     args_cli, _ = parser.parse_known_args()
 
@@ -107,7 +110,7 @@ def main():
             with torch.inference_mode():  # policy state tensors are inference tensors; keep resets inside
                 obs, _ = env.reset()
                 policy.reset()
-                policy.set_m7(offset, tilt)
+                policy.set_m7(offset, tilt, recover=args_cli.recover)
                 for _ in range(args_cli.max_steps):
                     action = policy.get_action(env, obs)
                     obs, _, term, trunc, _ = env.step(action)
