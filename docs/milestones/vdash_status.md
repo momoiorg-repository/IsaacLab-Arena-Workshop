@@ -99,12 +99,18 @@ handoff lateral exceeds what fits a ≤1 mm hole → **classical baseline has a 
 
 ## Open decisions / next items
 
-1. **Reproducibility (audit #1):** the 98%/20%/basin numbers came from an **uncommitted** working tree;
-   `insertion_controller.py` was edited after some runs. **Freeze code+config on a commit and re-run**
-   before any number is load-bearing. *(Not committed — awaiting your go.)*
+1. **Reproducibility (audit #1) — RESOLVED 2026-06-27:** the headline code+config is frozen on
+   `be154b29` + `66775820` (the latter adds the env start-pose/floor + side-cam focal-8 that the first
+   freeze omitted), and the numbers were **re-run from that frozen tree and confirmed**: E2 scripted
+   **c2.0 L0 50/50, L1 49/50; c≤1.0 all 0/50** (bit-identical to the prior run, incl. `f_ins` to 3 dp),
+   E4 basin **held 37.6% (220/585) / recover 83.8% (490/585)** over 5 seeds, VLA v6 **4/20 = 20%**
+   (4 success / 11 insertion_failed / 5 timeout — identical breakdown). Reproduced CSVs +
+   `scripts/vdash/run_headline_repro.sh` committed; the numbers are now load-bearing.
 2. **Main-result framing:** anchor the paper on **c=2.0** (current achieved domain), or pursue sub-mm?
    Sub-mm needs tightening the **scripted handoff precision** (a precision-pick task) — won't make 7/2.
 3. **Multi-seed the VLA 20%** if it's cited as more than existence (carries ~5–6% image-aug variance).
+   (E4 basins were 5-seeded and are **deterministic at L0** — all 5 seeds identical — so only the VLA
+   path carries seed/sampling variance; the scripted E2/E4 numbers do not.)
 4. **c3.0 socket** must be generated if a looser-clearance E2 point is wanted (series ships only
    {2.0, 1.0, 0.5, 0.25}; `--clearance 3.0` silently snaps to 2.0).
 5. **Deferred to next VLA iter (request v3 / Sept):** grasp **quality** (not rate) — the actual lever.
