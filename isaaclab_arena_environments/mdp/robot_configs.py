@@ -48,3 +48,25 @@ FRANKA_PANDA_VDASH_CFG = FRANKA_PANDA_HIGH_PD_CFG.copy()
 FRANKA_PANDA_VDASH_CFG.spawn.activate_contact_sensors = True
 FRANKA_PANDA_VDASH_CFG.spawn.rigid_props.disable_gravity = True
 FRANKA_PANDA_VDASH_CFG.init_state.pos = (0.0, 0.0, 0.0)
+
+# Lower resting arm pose: the stock HIGH_PD home (joint2 -0.569, joint4 -2.810) holds the gripper
+# high above the table. Lean the shoulder forward and open the elbow so the gripper starts lower /
+# closer to the peg+socket workspace; keep the wrist (joint6) pointing down. Tune joint2/joint4 to
+# raise/lower. NOTE: this changes the demo/eval start pose -> existing VLA models are off-distribution
+# and need re-recording + retrain to compare fairly.
+# NOTE (verified 2026-06-23): this init_state.joint_pos is in fact a NO-OP for the actual reset pose —
+# the Franka embodiment's `init_franka_arm_pose` reset EVENT (FrankaEventCfg, default_pose
+# [0, -0.785, -0.1107, -1.1775, 0, 0.785, 0.785, ...]) overrides it every reset. Probed post-reset
+# joint_pos is the event pose regardless of the values below. Left as-is; change the event to actually
+# move the start pose.
+FRANKA_PANDA_VDASH_CFG.init_state.joint_pos = {
+    "panda_joint1": 0.0,
+    "panda_joint2": -0.10,  # was -0.569: shoulder forward/down -> lowers gripper
+    "panda_joint3": 0.0,
+    "panda_joint4": -2.50,  # was -2.810: open elbow slightly
+    "panda_joint5": 0.0,
+    "panda_joint6": 3.037,  # keep wrist pointing down
+    "panda_joint7": 0.741,
+    "panda_finger_joint1": 0.04,
+    "panda_finger_joint2": 0.04,
+}

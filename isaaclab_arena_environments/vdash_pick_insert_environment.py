@@ -1,5 +1,8 @@
-# Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers.
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
 # SPDX-License-Identifier: Apache-2.0
+
 """V-DASH pick→insert environment (brief §3).
 
 Composes the Franka embodiment, a kinematic parametric socket of the requested clearance ``c``, the
@@ -17,6 +20,7 @@ injected into the ``inserted`` success test; ``--level`` selects the L0–L3 sce
 from __future__ import annotations
 
 import argparse
+import os
 
 from isaaclab_arena_environments.example_environment_base import ExampleEnvironmentBase
 
@@ -56,12 +60,17 @@ class VDashPickInsertEnvironment(ExampleEnvironmentBase):
         peg = self.asset_registry.get_asset_by_name("vdash_peg")()
         light_spawner_cfg = sim_utils.DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=1500.0)
         light = self.asset_registry.get_asset_by_name("light")(spawner_cfg=light_spawner_cfg)
+        ground_plane = self.asset_registry.get_asset_by_name("ground_plane")()
         embodiment = self.asset_registry.get_asset_by_name(args_cli.embodiment)(
-            enable_cameras=args_cli.enable_cameras
+            enable_cameras=args_cli.enable_cameras,
+            # Start the arm hovering straight down over the workspace center (~16 cm above the grasp)
+            # instead of the far/high default home -> shorter, more consistent pick demos for the VLA.
+            # IK-solved for TCP (0.50, 0, 0.27) pointing -z -- the center of the L1 peg/socket spread
+            # x in [0.40,0.60] (verified from data). Applied via the embodiment's init_franka_arm_pose
+            # reset event (NOT init_state.joint_pos, which the event overrides).
+            initial_joint_pose=[0.0, -0.0765, 0.0, -2.3076, 0.0, 2.2311, 0.785, 0.04, 0.04],
         )
-        embodiment.scene_config.robot = mdp.FRANKA_PANDA_VDASH_CFG.replace(
-            prim_path="{ENV_REGEX_NS}/Robot"
-        )
+        embodiment.scene_config.robot = mdp.FRANKA_PANDA_VDASH_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
         teleop_device = (
             self.device_registry.get_device_by_name(args_cli.teleop_device)()
@@ -71,6 +80,8 @@ class VDashPickInsertEnvironment(ExampleEnvironmentBase):
 
         # --- poses (table top ~ z=0; socket mouth at z=mouth_height) ------------------------------
         background.set_initial_pose(Pose(position_xyz=(0.55, 0.0, 0.0), rotation_wxyz=(0.707, 0, 0, 0.707)))
+        # floor under the table (table top ~ z=0, table ~1.05 m tall) — replaces the blank white room
+        ground_plane.set_initial_pose(Pose(position_xyz=(0.0, 0.0, -1.05)))
         socket.set_initial_pose(Pose(position_xyz=(0.5, 0.0, 0.0), rotation_wxyz=(1.0, 0.0, 0.0, 0.0)))
         if args_cli.preinsert:
             # seat the peg tip on the bore axis (default: ~5 mm below the success depth threshold)
@@ -82,6 +93,10 @@ class VDashPickInsertEnvironment(ExampleEnvironmentBase):
         # --- scene-diversity profile (L0–L3) -----------------------------------------------------
         prof = vdash_randomization.profile(args_cli.level)
         assets = [background, socket, peg, light]
+        # VDASH_NO_FLOOR: drop the floor (added 2026-06-19) to match the blank-white-room scene the
+        # v3 VLA dataset was recorded in — isolates background domain-gap from model quality at eval.
+        if not os.environ.get("VDASH_NO_FLOOR"):
+            assets.append(ground_plane)
         assets += self._make_distractors(prof.num_distractors)
 
         scene = Scene(assets=assets)
@@ -140,9 +155,7 @@ class VDashPickInsertEnvironment(ExampleEnvironmentBase):
         parser.add_argument(
             "--preinsert", action="store_true", help="spawn the peg pre-seated (inserted-path smoke test)"
         )
-        parser.add_argument(
-            "--preinsert_z", type=float, default=None, help="override peg-tip z for --preinsert (m)"
-        )
+        parser.add_argument("--preinsert_z", type=float, default=None, help="override peg-tip z for --preinsert (m)")
         parser.add_argument("--teleop_device", type=str, default=None)
 
 

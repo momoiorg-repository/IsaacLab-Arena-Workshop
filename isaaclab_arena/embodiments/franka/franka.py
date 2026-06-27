@@ -342,8 +342,12 @@ class FrankaCameraCfg:
             height=256,
             width=256,
             data_types=["rgb"],
+            # focal_length 2.8 -> 8: the side cams sit ~97cm back with an 88deg FOV, so the peg was only
+            # ~3px wide (frame dominated by floor/table) -> under-resolved for grasp localization. Zooming
+            # (cameras already aimed at the workspace) grows the peg to ~10px while the 20cm L1 workspace
+            # still fits. NOTE: bakes into recorded demos -> regenerate data + retrain after changing.
             spawn=sim_utils.PinholeCameraCfg(
-                focal_length=2.8, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
+                focal_length=8.0, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
             ),
             offset=OffsetClass(pos=(0.05, 0.57, 0.66), rot=(-0.393, -0.195, 0.399, 0.805), convention="opengl"),
         )
@@ -356,8 +360,9 @@ class FrankaCameraCfg:
             height=256,
             width=256,
             data_types=["rgb"],
+            # focal_length 2.8 -> 8 to zoom in on the workspace (see left_cam note above).
             spawn=sim_utils.PinholeCameraCfg(
-                focal_length=2.8, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
+                focal_length=8.0, focus_distance=28, horizontal_aperture=5.376, vertical_aperture=3.024
             ),
             offset=OffsetClass(pos=(0.05, -0.57, 0.66), rot=(0.805, 0.399, -0.195, -0.393), convention="opengl"),
         )
