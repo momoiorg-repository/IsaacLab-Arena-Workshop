@@ -1,5 +1,8 @@
-# Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers.
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
 # SPDX-License-Identifier: Apache-2.0
+
 """V-DASH scripted expert policy: scripted pick → rule-based insertion (brief §3.3).
 
 Sequences :class:`~isaaclab_arena.controllers.scripted_pick.ScriptedPick` and
@@ -14,9 +17,8 @@ Registered as policy ``vdash_scripted`` (use with ``policy_runner.py --policy_ty
 from __future__ import annotations
 
 import argparse
-import os
-
 import gymnasium as gym
+import os
 import torch
 from dataclasses import dataclass
 from gymnasium.spaces.dict import Dict as GymSpacesDict
@@ -30,7 +32,7 @@ from isaaclab_arena.policy.policy_base import PolicyBase
 @dataclass
 class VDashScriptedPolicyArgs:
     @classmethod
-    def from_cli_args(cls, args: argparse.Namespace) -> "VDashScriptedPolicyArgs":
+    def from_cli_args(cls, args: argparse.Namespace) -> VDashScriptedPolicyArgs:
         return cls()
 
 
@@ -46,8 +48,8 @@ class VDashScriptedPolicy(PolicyBase):
         self._ins: InsertionController | None = None
         self._in_insertion: torch.Tensor | None = None
         self._m7_offset: torch.Tensor | None = None  # (N,2) M7 lateral offset (m)
-        self._m7_tilt: torch.Tensor | None = None    # (N,2) M7 lean = θ·(cos az, sin az)
-        self._m7_recover: bool = False               # release the hold at PRESS entry (recovery basin)
+        self._m7_tilt: torch.Tensor | None = None  # (N,2) M7 lean = θ·(cos az, sin az)
+        self._m7_recover: bool = False  # release the hold at PRESS entry (recovery basin)
         self._debug = bool(os.environ.get("VDASH_DEBUG"))
         self._step = 0
 
@@ -105,9 +107,29 @@ class VDashScriptedPolicy(PolicyBase):
             grip = float(robot.data.joint_pos[0, -2:].abs().sum())
             if not getattr(self, "_gd_handoff_logged", False) and bool(self._in_insertion[0]):
                 self._gd_handoff_logged = True
-                print(f"[graspdiag] pol=scripted ep={getattr(self,'_gd_ep',0)} HANDOFF "
-                      f"ingrip_tilt={ingrip_tilt:.1f}deg lat={lat_mm:.1f}mm peg_speed={peg_speed:.3f} "
-                      f"grip={grip:.3f}", flush=True)
+                print(
+                    f"[graspdiag] pol=scripted ep={getattr(self, '_gd_ep', 0)} HANDOFF "
+                    f"ingrip_tilt={ingrip_tilt:.1f}deg lat={lat_mm:.1f}mm peg_speed={peg_speed:.3f} "
+                    f"grip={grip:.3f}",
+                    flush=True,
+                )
+                # tilt-observability probe: is the in-gripper cock readable from the per-finger contact
+                # forces (§2.1-legal: gripper's own force sensing, not peg pose)? Log per-finger nets.
+                if os.environ.get("VDASH_FINGER_DIAG"):
+                    try:
+                        fm = env.unwrapped.scene[task.names["peg_finger_sensor"]].data.force_matrix_w[0]  # (B,M,3)
+                        ff = fm.reshape(-1, fm.shape[-1]) if fm.dim() == 2 else fm.sum(dim=0)  # (M,3) per-finger net
+                        f0, f1 = ff[0], ff[1]
+                        print(
+                            "[fingerdiag]"
+                            f" gt_tilt={ingrip_tilt:.1f} gt_lat={lat_mm:.1f} f0=({f0[0]:.2f},{f0[1]:.2f},{f0[2]:.2f})"
+                            f" f1=({f1[0]:.2f},{f1[1]:.2f},{f1[2]:.2f})"
+                            f" d_xy=({float(f0[0] - f1[0]):.2f},{float(f0[1] - f1[1]):.2f})"
+                            f" dz={float(f0[2] - f1[2]):.2f}",
+                            flush=True,
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        print(f"[fingerdiag] err {e}", flush=True)
         ins_action = self._ins.step(env, active=self._in_insertion)
         action = torch.where(self._in_insertion.unsqueeze(-1), ins_action, pick_action)
 
@@ -154,8 +176,8 @@ class VDashScriptedPolicy(PolicyBase):
             f"[VDASH_DEBUG] step={self._step} pick_ph={int(self._pick.phase[0])} "
             f"ins_ph={int(self._ins.phase[0])} in_ins={int(self._in_insertion[0])} "
             f"ee=({ee[0].item():.3f},{ee[1].item():.3f},{ee[2].item():.3f}) "
-            f"tip_z={tip[2].item():.4f} depth={depth*1000:.1f}mm lat={lateral*1000:.2f}mm "
-            f"tilt={tilt:.1f}deg grip={gw*1000:.1f}mm f={f:.1f}N",
+            f"tip_z={tip[2].item():.4f} depth={depth * 1000:.1f}mm lat={lateral * 1000:.2f}mm "
+            f"tilt={tilt:.1f}deg grip={gw * 1000:.1f}mm f={f:.1f}N",
             flush=True,
         )
 
@@ -164,5 +186,5 @@ class VDashScriptedPolicy(PolicyBase):
         return parser
 
     @staticmethod
-    def from_args(args: argparse.Namespace) -> "VDashScriptedPolicy":
+    def from_args(args: argparse.Namespace) -> VDashScriptedPolicy:
         return VDashScriptedPolicy(VDashScriptedPolicyArgs.from_cli_args(args))

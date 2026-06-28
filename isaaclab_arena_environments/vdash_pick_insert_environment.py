@@ -113,7 +113,9 @@ class VDashPickInsertEnvironment(ExampleEnvironmentBase):
             texture_event=prof.texture_event,
             run_tag=f"{args_cli.run_tag}_c{clearance_mm}_{prof.level}",
             log_dir=args_cli.log_dir,
-            episode_length_s=float(task_cfg["termination"]["episode_length_s"]),
+            # VDASH_EPISODE_S overrides the episode budget (default off) — used to give the tactile
+            # CALIBRATE probe room for its touch sequence before the insert; headline path unchanged.
+            episode_length_s=float(os.environ.get("VDASH_EPISODE_S") or task_cfg["termination"]["episode_length_s"]),
             overhead_cam=args_cli.enable_cameras,  # M8: top-down vision cam only when cameras are on
         )
 

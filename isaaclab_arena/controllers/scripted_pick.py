@@ -1,5 +1,8 @@
-# Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers.
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
 # SPDX-License-Identifier: Apache-2.0
+
 """Scripted pick / transport expert (brief §3.3 — stand-in for the VLA front-end).
 
 A *privileged* state machine: it reads the ground-truth peg/socket poses from the scene (the VLA's
@@ -13,12 +16,11 @@ after reset.
 from __future__ import annotations
 
 import os
-
 import torch
 
 from isaaclab.utils.math import quat_apply
 
-from isaaclab_arena.controllers.ee_control import ee_pose_action, pos_reached, read_ee_pose
+from isaaclab_arena.controllers.ee_control import ee_pose_action, read_ee_pose
 
 # phase codes
 APPROACH, DESCEND, CLOSE, LIFT, TRANSPORT, DONE = range(6)
@@ -60,7 +62,17 @@ class ScriptedPick:
         peg = env.unwrapped.scene[self.names["peg"]].data
         off = torch.zeros_like(peg.root_pos_w)
         off[:, 2] = self.cfg["grip_offset"]
-        return peg.root_pos_w + quat_apply(peg.root_quat_w, off)
+        gp = peg.root_pos_w + quat_apply(peg.root_quat_w, off)
+        # TEST-BED (diagnostic, default off): VDASH_GRASP_OFF_MM shifts the grasp target laterally so the
+        # gripper closes off-centre on the grip cube -> the peg is held off the gripper axis. This
+        # reproduces the VLA's in-gripper grasp error WITHOUT the VLA, to measure the blind-channel
+        # response R(g) (see docs/vdash_precision_budget_plan.md). Fixed +x direction for determinism;
+        # the realized in-gripper lateral/tilt is read out via VDASH_GRASP_DIAG.
+        off_mm = float(os.environ.get("VDASH_GRASP_OFF_MM", "0") or "0")
+        if off_mm != 0.0:
+            gp = gp.clone()
+            gp[:, 0] = gp[:, 0] + off_mm / 1000.0
+        return gp
 
     def _socket_xy(self, env) -> torch.Tensor:
         return env.unwrapped.scene[self.names["socket"]].data.root_pos_w[:, :2]
@@ -77,6 +89,16 @@ class ScriptedPick:
             # (that coupling, from the old square-peg yaw-align, made the data unlearnable -> 0% grasp).
             q_down0 = torch.zeros_like(self.q_hold)
             q_down0[:, 1] = 1.0  # (w,x,y,z)=(0,1,0,0): gripper approach axis points exactly world -z
+            # TEST-BED (default off): VDASH_GRASP_OFF_DEG tilts the grasp approach to induce an in-gripper
+            # cock (for the tilt-fix study); realized in-gripper tilt is read out via VDASH_GRASP_DIAG.
+            deg = float(os.environ.get("VDASH_GRASP_OFF_DEG", "0") or "0")
+            if deg != 0.0:
+                from isaaclab.utils.math import quat_from_angle_axis, quat_mul
+
+                ax = torch.zeros(q_down0.shape[0], 3, device=q_down0.device)
+                ax[:, 0] = 1.0  # tilt about world-x
+                ang = torch.full((q_down0.shape[0],), deg * 3.141592653589793 / 180.0, device=q_down0.device)
+                q_down0 = quat_mul(quat_from_angle_axis(ang, ax), q_down0)
             self.q_hold = torch.where(cap.unsqueeze(-1), q_down0, self.q_hold)
             self.need_capture = self.need_capture & ~cap
 
