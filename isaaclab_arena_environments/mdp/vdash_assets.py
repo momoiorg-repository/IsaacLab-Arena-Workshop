@@ -1,5 +1,8 @@
-# Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers.
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
 # SPDX-License-Identifier: Apache-2.0
+
 """V-DASH parametric peg / socket assets, registered into the Arena asset registry.
 
 Points at the locally generated USDs (``assets/vdash/``, produced by
@@ -78,6 +81,28 @@ class VDashSocketC1(_VDashSocket):
     clearance_mm = 1.0
 
 
+# Intermediate clearances (RSJ2026 clearance-cliff sweep): fill 2.0 -> 1.0.
+@register_asset
+class VDashSocketC1p75(_VDashSocket):
+    name = "vdash_socket_c1p75"
+    usd_path = os.path.join(VDASH_ASSET_DIR, "socket_c1p75.usd")
+    clearance_mm = 1.75
+
+
+@register_asset
+class VDashSocketC1p5(_VDashSocket):
+    name = "vdash_socket_c1p5"
+    usd_path = os.path.join(VDASH_ASSET_DIR, "socket_c1p5.usd")
+    clearance_mm = 1.5
+
+
+@register_asset
+class VDashSocketC1p25(_VDashSocket):
+    name = "vdash_socket_c1p25"
+    usd_path = os.path.join(VDASH_ASSET_DIR, "socket_c1p25.usd")
+    clearance_mm = 1.25
+
+
 @register_asset
 class VDashSocketC0p5(_VDashSocket):
     name = "vdash_socket_c0p5"
@@ -95,6 +120,9 @@ class VDashSocketC0p25(_VDashSocket):
 # clearance (mm) -> registered socket asset name, for the env / eval grid
 VDASH_SOCKET_BY_CLEARANCE = {
     2.0: "vdash_socket_c2",
+    1.75: "vdash_socket_c1p75",
+    1.5: "vdash_socket_c1p5",
+    1.25: "vdash_socket_c1p25",
     1.0: "vdash_socket_c1",
     0.5: "vdash_socket_c0p5",
     0.25: "vdash_socket_c0p25",

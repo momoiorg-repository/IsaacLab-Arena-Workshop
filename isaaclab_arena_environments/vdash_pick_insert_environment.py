@@ -25,7 +25,7 @@ import os
 from isaaclab_arena_environments.example_environment_base import ExampleEnvironmentBase
 
 # canonical clearances we ship sockets for (mm)
-_SUPPORTED_CLEARANCES_MM = (2.0, 1.0, 0.5, 0.25)
+_SUPPORTED_CLEARANCES_MM = (2.0, 1.75, 1.5, 1.25, 1.0, 0.5, 0.25)
 _DISTRACTOR_ASSETS = ("red_cube", "green_cube", "blue_block_basic_robolab")
 
 
