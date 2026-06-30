@@ -1,3 +1,8 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers.
 # SPDX-License-Identifier: Apache-2.0
 """V-DASH VLA + rule-based insertion switcher policy (the brief's M6 hierarchy for VLA eval).
@@ -27,9 +32,9 @@ Run single-env (non-tiled cameras render one env):
 from __future__ import annotations
 
 import argparse
+import gymnasium as gym
 import math
 import os
-import gymnasium as gym
 import torch
 from dataclasses import dataclass
 
@@ -48,7 +53,7 @@ class VDashVLAPolicyArgs:
     num_envs: int = 1
 
     @classmethod
-    def from_cli_args(cls, args: argparse.Namespace) -> "VDashVLAPolicyArgs":
+    def from_cli_args(cls, args: argparse.Namespace) -> VDashVLAPolicyArgs:
         return cls(
             policy_config_yaml_path=args.policy_config_yaml_path,
             policy_device=getattr(args, "policy_device", "cuda"),
@@ -85,6 +90,7 @@ class VDashVLAPolicy(PolicyBase):
         self._in_insertion: torch.Tensor | None = None
         self._hp: dict | None = None
         self._ids = None  # (arm_joint_ids, finger1_id, ee_body_idx, jacobi_idx, ee_offset_pos, ee_offset_quat)
+        self._gate = None  # precision-budget handoff gate (VDASH_BUDGET_GATE); set in _ensure
 
     # ----------------------------------------------------------------- setup
     def _ensure(self, env):
@@ -108,18 +114,28 @@ class VDashVLAPolicy(PolicyBase):
         snames = {**t["scene_names"], "peg": names["peg"], "socket": names["socket"]}
         geom = t["geometry"]
         self._hp = dict(
-            peg_name=snames["peg"], socket_name=snames["socket"], robot_name=snames["robot"],
-            peg_finger_sensor=snames["peg_finger_sensor"], tip_offset=tuple(geom["tip_offset"]),
-            mouth_height=mouth_height, **t["handoff"], **t["grasped"],
+            peg_name=snames["peg"],
+            socket_name=snames["socket"],
+            robot_name=snames["robot"],
+            peg_finger_sensor=snames["peg_finger_sensor"],
+            tip_offset=tuple(geom["tip_offset"]),
+            mouth_height=mouth_height,
+            **t["handoff"],
+            **t["grasped"],
         )
 
         n, dev = u.num_envs, u.device
         self._in_insertion = torch.zeros(n, dtype=torch.bool, device=dev)
+        from isaaclab_arena.controllers.budget_gate import BudgetGate
+
+        _g = BudgetGate()
+        self._gate = _g if _g.enabled else None
 
         # IK bridge: same controller config as the recording env's FrankaIKJointRecordingAction.
         self._ik = DifferentialIKController(
             DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls"),
-            num_envs=n, device=dev,
+            num_envs=n,
+            device=dev,
         )
         robot = u.scene["robot"]
         arm_ids, _ = robot.find_joints(self._ARM_JOINTS, preserve_order=True)
@@ -137,6 +153,7 @@ class VDashVLAPolicy(PolicyBase):
         # in isolation (reliable grasp -> if insertion still fails, the bridge is the bug).
         if os.environ.get("VDASH_VLA_SCRIPTED_PICK"):
             from isaaclab_arena.controllers.scripted_pick import ScriptedPick
+
             self._pick = ScriptedPick(names, cc["ee_control"], cc["pick"])
 
     # ------------------------------------------------------------------ frame helpers (mirror IK action term)
@@ -163,9 +180,12 @@ class VDashVLAPolicy(PolicyBase):
         _, ee_quat_b = self._ee_frame_pose(env)
         off_w = torch.bmm(matrix_from_quat(ee_quat_b), off_pos.unsqueeze(-1)).squeeze(-1)
         skew = torch.zeros(jac.shape[0], 3, 3, device=jac.device)
-        skew[:, 0, 1] = -off_w[:, 2]; skew[:, 0, 2] = off_w[:, 1]
-        skew[:, 1, 0] = off_w[:, 2];  skew[:, 1, 2] = -off_w[:, 0]
-        skew[:, 2, 0] = -off_w[:, 1]; skew[:, 2, 1] = off_w[:, 0]
+        skew[:, 0, 1] = -off_w[:, 2]
+        skew[:, 0, 2] = off_w[:, 1]
+        skew[:, 1, 0] = off_w[:, 2]
+        skew[:, 1, 2] = -off_w[:, 0]
+        skew[:, 2, 0] = -off_w[:, 1]
+        skew[:, 2, 1] = off_w[:, 0]
         jac[:, 0:3, :] += torch.bmm(skew, jac[:, 3:6, :])
         return jac
 
@@ -200,7 +220,22 @@ class VDashVLAPolicy(PolicyBase):
             pick_act = self._ik_to_joint(uenv, pick_ik)
         else:
             pick_act = self._vla.get_action(env, observation)  # (N, 8) joint targets (uses obs, not env)
-            self._in_insertion = self._in_insertion | vp.handoff(uenv, **self._hp)  # latch on §3.4 handoff
+            fired = vp.handoff(uenv, **self._hp)
+            if self._gate is not None:  # precision-budget gate on the VLA->rule handoff
+                newly = fired & ~self._in_insertion
+                if bool(newly.any()):
+                    go, tilt_e, e_mm, dz = self._gate.evaluate(uenv, self._hp["peg_finger_sensor"])
+                    for i in newly.nonzero(as_tuple=True)[0].tolist():
+                        print(
+                            f"[budgetgate] pol=vla ep={getattr(self, '_dbg_ep', 0)} env={i} "
+                            f"tilt_est={float(tilt_e[i]):.1f}deg e_est={float(e_mm[i]):.1f}mm "
+                            f"budget={self._gate.budget_mm:.1f}mm decision={'GO' if bool(go[i]) else 'NOGO'} "
+                            f"dz={float(dz[i]):.2f}N",
+                            flush=True,
+                        )
+                    if self._gate.active and bool((newly & ~go).any()):
+                        self._ins._decant = True  # correct-on-no-go: de-cant straightens the cocked grasp
+            self._in_insertion = self._in_insertion | fired  # latch on §3.4 handoff
         if os.environ.get("VDASH_VLA_DEBUG"):  # TEMP: where is the gripper vs the peg, and does it close?
             self._dbg_step = getattr(self, "_dbg_step", 0) + 1
             if self._dbg_step % 10 == 1:
@@ -211,15 +246,18 @@ class VDashVLAPolicy(PolicyBase):
                 ee = robot.data.body_state_w[0, self._ids[2], :3]
                 peg = uenv.scene[self._hp["peg_name"]].data.root_pos_w[0, :3]
                 dxy = float(((ee[:2] - peg[:2]) ** 2).sum() ** 0.5)  # horizontal gripper->peg offset
-                dz = float(ee[2] - peg[2])                           # vertical (EE above peg)
+                dz = float(ee[2] - peg[2])  # vertical (EE above peg)
                 grip = float(robot.data.joint_pos[0, self._ids[1]])  # finger gap: open~0.04 closed~0.0
                 # track closest horizontal approach this episode (is it ever grasp-aligned?)
                 self._dbg_min_dxy = min(getattr(self, "_dbg_min_dxy", 1e9), dxy)
                 ep = getattr(self, "_dbg_ep", 0)
-                print(f"[vladbg] ep={ep} step={self._dbg_step} insert={bool(self._in_insertion[0])} "
-                      f"EE=({ee[0]:.3f},{ee[1]:.3f},{ee[2]:.3f}) peg=({peg[0]:.3f},{peg[1]:.3f},{peg[2]:.3f}) "
-                      f"dxy={dxy:.3f} dz={dz:.3f} minDxy={self._dbg_min_dxy:.3f} grip={grip:.3f} "
-                      f"|tgt-cur|max={d.max():.4f}", flush=True)
+                print(
+                    f"[vladbg] ep={ep} step={self._dbg_step} insert={bool(self._in_insertion[0])} "
+                    f"EE=({ee[0]:.3f},{ee[1]:.3f},{ee[2]:.3f}) peg=({peg[0]:.3f},{peg[1]:.3f},{peg[2]:.3f}) "
+                    f"dxy={dxy:.3f} dz={dz:.3f} minDxy={self._dbg_min_dxy:.3f} grip={grip:.3f} "
+                    f"|tgt-cur|max={d.max():.4f}",
+                    flush=True,
+                )
         if os.environ.get("VDASH_GRASP_DIAG"):  # grasp-quality diag: how does the peg sit IN the gripper?
             from isaaclab.utils.math import quat_apply
 
@@ -231,8 +269,8 @@ class VDashVLAPolicy(PolicyBase):
             ee_pos = ee_pos_b[0]
             ee_quat = ee_quat_b[0]
             zloc = torch.tensor([0.0, 0.0, 1.0], device=ee_quat.device)
-            peg_axis = quat_apply(pegd.root_quat_w[0], zloc)            # peg long axis in world
-            ee_axis = quat_apply(ee_quat, zloc)                         # gripper axis in world
+            peg_axis = quat_apply(pegd.root_quat_w[0], zloc)  # peg long axis in world
+            ee_axis = quat_apply(ee_quat, zloc)  # gripper axis in world
             # in-gripper tilt = angle between peg axis and gripper axis (0 = nominal straight grasp).
             # The controller's tip_estimate assumes these are colinear; misalignment => wrong tip target.
             cosang = float(torch.dot(peg_axis, ee_axis).abs().clamp(max=1.0))
@@ -247,14 +285,22 @@ class VDashVLAPolicy(PolicyBase):
             latched = bool(self._in_insertion[0])
             if not getattr(self, "_gd_handoff_logged", False) and latched:
                 self._gd_handoff_logged = True
-                print(f"[graspdiag] pol=vla ep={ep} HANDOFF ingrip_tilt={ingrip_tilt:.1f}deg "
-                      f"lat={lat_mm:.1f}mm peg_speed={peg_speed:.3f} grip={grip:.3f}", flush=True)
+                print(
+                    f"[graspdiag] pol=vla ep={ep} HANDOFF ingrip_tilt={ingrip_tilt:.1f}deg "
+                    f"lat={lat_mm:.1f}mm peg_speed={peg_speed:.3f} grip={grip:.3f}",
+                    flush=True,
+                )
             elif getattr(self, "_dbg_step", 0) % 20 == 1 and grip < 0.02:  # grasped, periodic
-                print(f"[graspdiag] pol=vla ep={ep} step={getattr(self,'_dbg_step',0)} {'INS' if latched else 'pick'} "
-                      f"ingrip_tilt={ingrip_tilt:.1f}deg lat={lat_mm:.1f}mm peg_speed={peg_speed:.3f}", flush=True)
+                print(
+                    f"[graspdiag] pol=vla ep={ep} step={getattr(self,'_dbg_step',0)} {'INS' if latched else 'pick'} "
+                    f"ingrip_tilt={ingrip_tilt:.1f}deg lat={lat_mm:.1f}mm peg_speed={peg_speed:.3f}",
+                    flush=True,
+                )
         if os.environ.get("VDASH_VLA_FORCE_INSERT"):  # debug: exercise the IK->joint bridge from step 0
             self._in_insertion[:] = True
         ins_ik = self._ins.step(uenv, active=self._in_insertion)  # (N, 7) relative-IK
+        if os.environ.get("VDASH_BACKSWITCH") and getattr(self._ins, "gave_up", None) is not None:
+            self._in_insertion = self._in_insertion & ~self._ins.gave_up  # back-switch: return to front-end
         ins_act = self._ik_to_joint(uenv, ins_ik)  # (N, 8) joint targets
         return torch.where(self._in_insertion.unsqueeze(-1), ins_act, pick_act)
 
@@ -275,11 +321,15 @@ class VDashVLAPolicy(PolicyBase):
     @staticmethod
     def add_args_to_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
         group = parser.add_argument_group("VDash VLA Policy", "GR00T VLA + rule-based insertion switcher")
-        group.add_argument("--policy_config_yaml_path", type=str, required=True,
-                           help="GR00T closed-loop config YAML (the VLA front end)")
+        group.add_argument(
+            "--policy_config_yaml_path",
+            type=str,
+            required=True,
+            help="GR00T closed-loop config YAML (the VLA front end)",
+        )
         group.add_argument("--policy_device", type=str, default="cuda")
         return parser
 
     @staticmethod
-    def from_args(args: argparse.Namespace) -> "VDashVLAPolicy":
+    def from_args(args: argparse.Namespace) -> VDashVLAPolicy:
         return VDashVLAPolicy(VDashVLAPolicyArgs.from_cli_args(args))

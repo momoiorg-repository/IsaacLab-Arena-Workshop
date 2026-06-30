@@ -52,6 +52,7 @@ class VDashScriptedPolicy(PolicyBase):
         self._m7_recover: bool = False  # release the hold at PRESS entry (recovery basin)
         self._debug = bool(os.environ.get("VDASH_DEBUG"))
         self._step = 0
+        self._gate = None  # precision-budget handoff gate (VDASH_BUDGET_GATE); set in _ensure
 
     def set_m7(self, offset_xy: torch.Tensor, tilt_vec: torch.Tensor, recover: bool = False) -> None:
         """E4/M7 harness: hold the insertion at a per-env offset (m) + lean (rad·dir); applied each step.
@@ -76,6 +77,10 @@ class VDashScriptedPolicy(PolicyBase):
         )
         n, dev = env.unwrapped.num_envs, env.unwrapped.device
         self._in_insertion = torch.zeros(n, dtype=torch.bool, device=dev)
+        from isaaclab_arena.controllers.budget_gate import BudgetGate
+
+        _g = BudgetGate()
+        self._gate = _g if _g.enabled else None
 
     # ------------------------------------------------------------------ act
     def get_action(self, env: gym.Env, observation: GymSpacesDict) -> torch.Tensor:
@@ -84,6 +89,21 @@ class VDashScriptedPolicy(PolicyBase):
             self._ins.set_m7(self._m7_offset, self._m7_tilt, recover=self._m7_recover)
         pick_action, pick_finished = self._pick.step(env)
         # latch into insertion once the pick reports finished (the handoff)
+        if self._gate is not None:  # precision-budget gate: score the handoff against the back-end tolerance
+            newly = pick_finished & ~self._in_insertion
+            if bool(newly.any()):
+                task = env.unwrapped.cfg.isaaclab_arena_env.task
+                go, tilt_e, e_mm, dz = self._gate.evaluate(env, task.names["peg_finger_sensor"])
+                for i in newly.nonzero(as_tuple=True)[0].tolist():
+                    print(
+                        f"[budgetgate] pol=scripted ep={getattr(self, '_gd_ep', 0)} env={i} "
+                        f"tilt_est={float(tilt_e[i]):.1f}deg e_est={float(e_mm[i]):.1f}mm "
+                        f"budget={self._gate.budget_mm:.1f}mm decision={'GO' if bool(go[i]) else 'NOGO'} "
+                        f"dz={float(dz[i]):.2f}N",
+                        flush=True,
+                    )
+                if self._gate.active and bool((newly & ~go).any()):
+                    self._ins._decant = True  # correct-on-no-go: de-cant straightens the cocked grasp in place
         self._in_insertion = self._in_insertion | pick_finished
         if os.environ.get("VDASH_GRASP_DIAG"):  # grasp-quality diag (mirror of vdash_vla_policy)
             import math
@@ -131,6 +151,8 @@ class VDashScriptedPolicy(PolicyBase):
                     except Exception as e:  # noqa: BLE001
                         print(f"[fingerdiag] err {e}", flush=True)
         ins_action = self._ins.step(env, active=self._in_insertion)
+        if os.environ.get("VDASH_BACKSWITCH") and getattr(self._ins, "gave_up", None) is not None:
+            self._in_insertion = self._in_insertion & ~self._ins.gave_up  # back-switch: return to front-end
         action = torch.where(self._in_insertion.unsqueeze(-1), ins_action, pick_action)
 
         if self._debug and (self._step % 15 == 0):
