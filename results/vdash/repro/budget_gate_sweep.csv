@@ -1,12 +1,14 @@
-# Precision-budget handoff gate: injected-tilt sweep (scripted test-bed, c=2.0, L1, 20 envs/level).
-# Gate is observable/§2.1-legal: tilt_est = |dz|/gain from per-finger force-z asymmetry, e_est = L*sin(tilt_est),
-# decision GO iff e_est <= budget (5 mm). Naive switch = always hand off (insertion success column).
-# tilt_est_mean over all handoff events; gt_tilt = mean ingrip_tilt from graspdiag (true peg pose, scoring-only).
-injected_tilt_deg,insertion_success_pct,gate_nogo_rate_pct,tilt_est_mean_deg,gt_tilt_mean_deg
-0,100,0,0.1,0.4
-4,55,0,2.5,3.1
-8,5,90,6.9,5.4
-12,0,100,11.7,12.0
-# active mode (gate -> de-cant correction on no-go) at injected 8 deg: 0/20 — de-cant straightens tilt but
-# the residual lateral term of e=l+L*sin(phi) keeps it out-of-budget, confirming both budget channels matter
-# (cf. the controlled de-cant + tactile-lateral combo reaching 19/20 in the correction study).
+# Precision-budget handoff gate + observable correction (scripted test-bed, c=2.0, L1, 20 envs/level).
+# Gate (§2.1-legal): tilt_est = |dz|/gain from per-finger force-z asymmetry; e_est = L*sin(tilt_est);
+#   decision GO iff e_est <= budget (5 mm). naive = always hand off, no correction.
+# observable_corrected = VDASH_GATE_CORRECT (sign -1): estimate cock from dz, shift the ASSUMED tip by
+#   L*sin(phi) laterally (the oracle's observable analogue) so the back-end servos the true tip; keeps the
+#   press straight (unlike de-cant, which rotates the hold and tilts the press). No peg pose used.
+injected_tilt_deg,naive_success_pct,gate_nogo_rate_pct,observable_corrected_pct,tilt_est_mean_deg,gt_tilt_mean_deg
+0,100,0,100,0.1,0.4
+4,55,0,100,2.5,3.1
+8,5,90,30,6.9,5.4
+12,0,100,0,11.7,12.0
+# Notes: de-cant (rotate-hold) did NOT recover (0/20 @8deg, both signs) — straightening the peg tilts the
+# press. The tip-shift correction recovers 4deg 55%->100% and 8deg 5%->30% (oracle ceiling @8mm = 11/20 = 55%),
+# and leaves clean grasps (0deg) at 100%. 12deg and single-axis-blind cocks remain out of reach (future work).

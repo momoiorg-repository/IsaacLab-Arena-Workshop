@@ -93,6 +93,12 @@ class InsertionController:
         self._decant = bool(os.environ.get("VDASH_DECANT"))
         self._decant_gain = float(os.environ.get("VDASH_DECANT_GAIN", "0.7") or "0.7")  # finger dz (N) per deg
         self._decant_sign = float(os.environ.get("VDASH_DECANT_SIGN", "1") or "1")  # +1 straightens (validated)
+        # §2.1 observable tip correction from the de-cant cue (default off): estimate the in-gripper cock from
+        # dz and shift the assumed tip by ~L*sin(phi) laterally — an observable approximation of the oracle
+        # (VDASH_CHEAT_TIP) that recovered 0->11/20. Unlike de-cant (which rotates the hold and tilts the
+        # press), this corrects the tip the controller servos to, keeping the press straight.
+        self._gate_correct = bool(os.environ.get("VDASH_GATE_CORRECT"))
+        self._gate_L_mm = float(os.environ.get("VDASH_GATE_L_MM", "60") or "60")  # grip->tip lever (mm)
         self._init_phase = CALIBRATE if self._tactile_cal else SETTLE
         self.phase = None
         # M7 (E4 convergence-zone harness): hold the peg tip at a controlled lateral offset + tilt and
@@ -142,6 +148,7 @@ class InsertionController:
         self.tip_correction = torch.zeros(n, 3, device=dev)
         self._frozen_noise = torch.zeros(n, 3, device=dev)  # per-episode estimator error (m), frozen once
         self._noise_set = torch.zeros(n, dtype=torch.bool, device=dev)
+        self._gatecorr_set = torch.zeros(n, dtype=torch.bool, device=dev)  # observable tip-corr frozen once/ep
         if self._tactile_cal:
             half = self._cal_half_mm / 1000.0
             step = self._cal_step_mm / 1000.0
@@ -177,6 +184,8 @@ class InsertionController:
         if hasattr(self, "_noise_set"):
             self._noise_set[idx] = False
             self._frozen_noise[idx] = 0.0
+        if hasattr(self, "_gatecorr_set"):
+            self._gatecorr_set[idx] = False
         if hasattr(self, "cal_idx"):
             self.cal_idx[idx] = 0
             self.cal_sub[idx] = 0
@@ -298,6 +307,29 @@ class InsertionController:
                     self._frozen_noise = torch.where(fresh.unsqueeze(-1), nz, self._frozen_noise)
                     self._noise_set = self._noise_set | fresh
             self.tip_correction = (true_tip - tip) + self._frozen_noise
+        # §2.1 observable tip correction from the de-cant cue (VDASH_GATE_CORRECT): a cock phi about the
+        # finger-perp axis displaces the blind tip by ~L*sin(phi) laterally; estimate phi from the per-finger
+        # force-z asymmetry (dz) and shift the assumed tip there (like the oracle, but observable). Frozen once.
+        if self._gate_correct and not self._cheat_tip:
+            fresh = active & ~self._gatecorr_set
+            if bool(fresh.any()):
+                from isaaclab.utils.math import quat_apply
+
+                try:
+                    fm = env.unwrapped.scene[self.names["peg_finger_sensor"]].data.force_matrix_w
+                    ff = fm.sum(dim=1)
+                    dz = ff[:, 0, 2] - ff[:, 1, 2] if ff.shape[1] >= 2 else torch.zeros(tip.shape[0], device=tip.device)
+                except Exception:  # noqa: BLE001
+                    dz = torch.zeros(tip.shape[0], device=tip.device)
+                beta = self._decant_sign * (dz / max(self._decant_gain, 1e-6)) * (3.141592653589793 / 180.0)
+                _, eq = read_ee_pose(env)
+                yloc = torch.zeros(tip.shape[0], 3, device=tip.device)
+                yloc[:, 1] = 1.0
+                y_world = quat_apply(eq, yloc)  # EE y-axis in world (cock about x displaces the tip along y)
+                corr = (-(self._gate_L_mm / 1000.0) * torch.sin(beta)).unsqueeze(-1) * y_world
+                corr[:, 2] = 0.0  # lateral (xy) correction only
+                self.tip_correction = torch.where(fresh.unsqueeze(-1), corr, self.tip_correction)
+                self._gatecorr_set = self._gatecorr_set | fresh
         # Add the §2.1-honest correction (filled by the tactile CALIBRATE probe, Phase 2) / oracle above.
         # Zero by default -> identical to the committed headline path.
         tip = tip + self.tip_correction
