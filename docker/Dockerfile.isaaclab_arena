@@ -49,6 +49,22 @@ RUN /isaac-sim/python.sh -m pip install flatdict==4.0.1 --no-build-isolation
 # Install isaaclab
 RUN ${ISAACLAB_PATH}/isaaclab.sh -i
 
+# Repair torch's cuSPARSELt lookup path.
+# The Isaac Sim base image ships torch under exts/omni.isaac.ml_archive/pip_prebundle/,
+# next to a sibling cusparselt/ directory, which is what torch's RPATH entry
+# "$ORIGIN/../../cusparselt/lib" resolves against. isaaclab.sh -i reinstalls torch into
+# site-packages, where cuSPARSELt instead lives under nvidia/cusparselt/, so the RPATH
+# entry dangles. torch usually hides this by ctypes-preloading the nvidia/* wheels, but
+# that fallback only runs when libtorch_global_deps.so fails to load -- and once the CUDA
+# 12.8 toolkit is installed (INSTALL_GROOT=true) it loads fine, so the fallback never
+# fires and "import torch" dies on libcusparseLt.so.0. Recreate the layout RPATH expects.
+RUN SITE_PACKAGES=$(/isaac-sim/python.sh -c "import sysconfig; print(sysconfig.get_paths()['purelib'])") && \
+  if [ -d "${SITE_PACKAGES}/nvidia/cusparselt" ] && [ ! -e "${SITE_PACKAGES}/cusparselt" ]; then \
+  ln -sfn "${SITE_PACKAGES}/nvidia/cusparselt" "${SITE_PACKAGES}/cusparselt"; \
+  fi && \
+  # Fail here rather than deep inside a later dependency build if torch is still broken.
+  /isaac-sim/python.sh -c "import torch; print('torch', torch.__version__, 'imports OK')"
+
 # Patch for osqp in IsaacLab. Downgrade qpsolvers
 # TODO(alexmillane): Watch the thread here: https://nvidia.slack.com/archives/C06HLQ6CB41/p1764680205807019
 #                    and remove this thread when IsaacLab has a fix.
