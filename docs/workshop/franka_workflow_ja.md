@@ -96,7 +96,7 @@ mkdir -p ${DATASET_DIR} ${MODELS_DIR}
 Franka アームがシーンに正しく表示されるか確認します。
 
 ```bash
-LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/replay_demos.py \
+LIVESTREAM=1 python isaaclab_arena/scripts/imitation_learning/replay_demos.py \
   --device cpu \
   table_pick_and_place \
   --embodiment franka \
@@ -126,10 +126,10 @@ Franka Panda とキューブが表示されていれば成功です。
 ### 2-2. デモの録画
 
 ```bash
-LIVESTREAM=2 python isaaclab_arena/scripts/imitation_learning/record_demos.py \
+LIVESTREAM=1 python isaaclab_arena/scripts/imitation_learning/record_demos.py \
   --device cpu \
   --enable_cameras \
-  --dataset_file ${DATASET_DIR}/franka_demo.hdf5 \
+  --dataset_file output/franka_demo.hdf5 \
   --num_demos 3 \
   --num_success_steps 2 \
   table_pick_and_place \
