@@ -30,14 +30,6 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
         pick_up_object = self.asset_registry.get_asset_by_name(args_cli.object)()
         destination_container = self.asset_registry.get_asset_by_name("red_container")()
         embodiment = self.asset_registry.get_asset_by_name(args_cli.embodiment)(enable_cameras=args_cli.enable_cameras)
-        
-        # Goal object
-        destination_location = ObjectReference(
-            name="destination_location",
-            prim_path="{ENV_REGEX_NS}/red_container",
-            parent_asset=destination_container,
-            object_type=ObjectType.RIGID,
-        )
 
         if args_cli.teleop_device is not None:
             teleop_device = self.device_registry.get_device_by_name(args_cli.teleop_device)()
@@ -52,13 +44,25 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
                 position_xyz_max=(0.65, 0.15, 0.30),
             )
         )
-        
+
         # Placing container on the white table in Galileo room
         destination_container.set_initial_pose(
             Pose(
                 position_xyz=(0.68, 0.31, 0.23),
                 rotation_wxyz=(1.0, 0.0, 0.0, 0.0),
             )
+        )
+
+        # Goal object.
+        # NOTE: must be constructed *after* destination_container.set_initial_pose().
+        # ObjectReference snapshots the parent's pose at construction time, so building
+        # it earlier bakes in a (0, 0, 0) goal and its reset event then drags the
+        # container (the same prim) back to the origin on every reset.
+        destination_location = ObjectReference(
+            name="destination_location",
+            prim_path="{ENV_REGEX_NS}/red_container",
+            parent_asset=destination_container,
+            object_type=ObjectType.RIGID,
         )
 
         scene = Scene(assets=[background, pick_up_object, destination_container, destination_location])
