@@ -93,6 +93,18 @@ RUN /isaac-sim/python.sh -m pip install --upgrade pip && \
   vuer[all] \
   lightwheel-sdk
 
+# Make the Lightwheel SDK request timeout configurable, and default it higher.
+# The SDK hardcodes base_timeout=10 with no env var and no retry on timeout, but the
+# dev endpoint below answers registry queries in roughly 1-11s. object_library.py calls
+# acquire_by_registry() in the class body of every asset, so importing it issues one
+# query per asset and a single slow response aborts environment setup with
+# "Failed to parse environment configuration: ... Read timed out".
+RUN SITE_PACKAGES=$(/isaac-sim/python.sh -c "import sysconfig; print(sysconfig.get_paths()['purelib'])") && \
+  sed -i 's/        base_timeout: int = 10,/        base_timeout: int = int(os.environ.get("LW_API_TIMEOUT", "120")),/' \
+  "${SITE_PACKAGES}/lightwheel_sdk/client/client.py" && \
+  # Fail the build if the patch silently stopped matching after an SDK upgrade.
+  /isaac-sim/python.sh -c "from lightwheel_sdk.client import lw_client; assert lw_client.base_timeout == 120, lw_client.base_timeout; print('Lightwheel timeout patched')"
+
 # Lightwheel server
 ENV LW_API_ENDPOINT="https://api-dev.lightwheel.net"
 
