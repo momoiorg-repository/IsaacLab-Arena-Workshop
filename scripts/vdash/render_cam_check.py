@@ -37,6 +37,12 @@ parser.add_argument(
 parser.add_argument(
     "--n_resets", type=int, default=1, help="render this many consecutive L1 resets (spread check); suffix _r{i}"
 )
+parser.add_argument(
+    "--policy_type",
+    type=str,
+    default="vdash_scripted",
+    help="policy driving the arm while framing (use zero_action for scenes without a scripted expert)",
+)
 add_example_environments_cli_args(parser)
 args_cli = parser.parse_args()
 
@@ -75,7 +81,7 @@ def main():
     env = gym.make(env_name, cfg=env_cfg).unwrapped
     if args_cli.seed is not None:
         set_seed(args_cli.seed, env)
-    policy = get_policy_cls("vdash_scripted").from_args(args_cli)
+    policy = get_policy_cls(args_cli.policy_type).from_args(args_cli)
 
     with torch.inference_mode():
         for i in range(args_cli.n_resets):
@@ -85,8 +91,14 @@ def main():
                 env.step(policy.get_action(env, None))
             cams = env.obs_buf["camera_obs"]
             sfx = "" if args_cli.n_resets == 1 else f"_r{i}"
-            peg = env.unwrapped.scene[env.unwrapped.cfg.isaaclab_arena_env.task.names["peg"]].data.root_pos_w[0]
-            print(f"[camcheck] reset {i}: peg=({peg[0]:.3f},{peg[1]:.3f})", flush=True)
+            # Best-effort: only the vdash task exposes a "peg" name. Other scenes (e.g. bdash) are
+            # framed against fixture poses instead, so a missing name must not abort the check.
+            try:
+                names = env.unwrapped.cfg.isaaclab_arena_env.task.names
+                tracked = env.unwrapped.scene[names["peg"]].data.root_pos_w[0]
+                print(f"[camcheck] reset {i}: peg=({tracked[0]:.3f},{tracked[1]:.3f})", flush=True)
+            except (AttributeError, KeyError, TypeError):
+                print(f"[camcheck] reset {i}", flush=True)
             for key, short in (("wrist_cam_rgb", "wrist"), ("left_cam_rgb", "left"), ("right_cam_rgb", "right")):
                 if key in cams:
                     p = os.path.join(args_cli.out_dir, f"{args_cli.out_prefix}_{short}{sfx}.png")

@@ -8,6 +8,7 @@ import importlib
 from typing import Any
 
 from isaaclab_arena.cli.isaaclab_arena_cli import get_isaaclab_arena_cli_parser
+from isaaclab_arena_environments.bdash_chuck_load_environment import BDashChuckLoadEnvironment
 from isaaclab_arena_environments.cube_goal_pose_environment import CubeGoalPoseEnvironment
 from isaaclab_arena_environments.droid_pick_and_place_srl_environment import DroidPickAndPlaceSRLEnvironment
 from isaaclab_arena_environments.franka_put_and_close_door_environment import FrankaPutAndCloseDoorEnvironment
@@ -52,6 +53,7 @@ ExampleEnvironments = {
     TablePickAndPlaceEnvironment.name: TablePickAndPlaceEnvironment,
     GR1TableMultiObjectNoCollisionEnvironment.name: GR1TableMultiObjectNoCollisionEnvironment,
     VDashPickInsertEnvironment.name: VDashPickInsertEnvironment,
+    BDashChuckLoadEnvironment.name: BDashChuckLoadEnvironment,
 }
 
 
