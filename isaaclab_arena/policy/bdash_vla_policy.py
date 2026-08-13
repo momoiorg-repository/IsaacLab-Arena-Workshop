@@ -289,7 +289,7 @@ class BDashVLAPolicy(PolicyBase):
                 )
             elif getattr(self, "_dbg_step", 0) % 20 == 1 and grip < 0.02:  # grasped, periodic
                 print(
-                    f"[graspdiag] pol=vla ep={ep} step={getattr(self,'_dbg_step',0)} {'INS' if latched else 'pick'} "
+                    f"[graspdiag] pol=vla ep={ep} step={getattr(self, '_dbg_step', 0)} {'INS' if latched else 'pick'} "
                     f"ingrip_tilt={ingrip_tilt:.1f}deg lat={lat_mm:.1f}mm peg_speed={peg_speed:.3f}",
                     flush=True,
                 )

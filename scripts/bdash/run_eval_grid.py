@@ -184,7 +184,7 @@ def aggregate(args, rows_spec) -> list[dict]:
             "jsonl": os.path.basename(path) if path else "",
         }
         if path:
-            data = [json.loads(line) for line in open(path)]
+            data = [json.loads(line) for line in open(path)]  # noqa: SIM115
             n = len(data)
             succ = sum(d["result"] == "success" for d in data)
             fi = [d.get("force_insert_max_N", 0.0) for d in data]
@@ -230,7 +230,7 @@ def main():
     pre.add_argument("--config", default=_DEFAULT_CFG)
     known, _ = pre.parse_known_args()
     if os.path.exists(known.config):
-        cfg = yaml.safe_load(open(known.config)) or {}
+        cfg = yaml.safe_load(open(known.config)) or {}  # noqa: SIM115
 
     p = argparse.ArgumentParser(parents=[pre], description="B-DASH evaluation grid runner (M4)")
     p.add_argument("--policies", nargs="+", default=cfg.get("policies", ["bdash_scripted"]))

@@ -87,8 +87,8 @@ def main():
             zerr = (est[:, 2] - gt[:, 2]) * 1000.0
             for i in range(n):
                 print(
-                    f"[cam] env{i} valid={int(valid[i])} est=({est[i,0]:.3f},{est[i,1]:.3f},{est[i,2]:.3f}) "
-                    f"gt=({gt[i,0]:.3f},{gt[i,1]:.3f},{gt[i,2]:.3f}) lat_err={err[i]:.1f}mm z_err={zerr[i]:.1f}mm",
+                    f"[cam] env{i} valid={int(valid[i])} est=({est[i, 0]:.3f},{est[i, 1]:.3f},{est[i, 2]:.3f}) "
+                    f"gt=({gt[i, 0]:.3f},{gt[i, 1]:.3f},{gt[i, 2]:.3f}) lat_err={err[i]:.1f}mm z_err={zerr[i]:.1f}mm",
                     flush=True,
                 )
 

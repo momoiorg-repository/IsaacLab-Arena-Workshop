@@ -169,7 +169,6 @@ def main():
     # weight (m*g) supplies the downward insertion force; a soft lateral spring holds xy so the
     # chamfer can guide; only the vertical axis is damped. A low wrench clamp keeps contact in the
     # brief's force regime — a stiff open-loop ram is what produced the earlier SDF blow-ups.
-    m = args_cli.peg_mass
     k_xy, d_xy, d_z = 300.0, 20.0, 6.0
     k_rot, d_rot = 0.1, 0.05
     f_clip, t_clip = 12.0, 0.5
@@ -223,7 +222,7 @@ def main():
             "stable": bool(stable[i]),
         })
         print(
-            f"[m1] c={c_mm:g}mm bore_r={bore_r*1000:.3f}mm off={frac*c_mm:.3f}mm "
+            f"[m1] c={c_mm:g}mm bore_r={bore_r * 1000:.3f}mm off={frac * c_mm:.3f}mm "
             f"descent={rows[-1]['descent_mm']:.2f}mm vmax={rows[-1]['max_speed_mps']:.3f} "
             f"vfin={rows[-1]['final_speed_mps']:.3f} inserted={rows[-1]['inserted']} "
             f"stable={rows[-1]['stable']}"
@@ -244,11 +243,11 @@ def main():
     agg = {}
     if os.path.isfile(args_cli.out):
         try:
-            agg = json.load(open(args_cli.out))
+            agg = json.load(open(args_cli.out))  # noqa: SIM115
         except Exception:
             agg = {}
     agg[f"c{tag}"] = result
-    json.dump(agg, open(args_cli.out, "w"), indent=2)
+    json.dump(agg, open(args_cli.out, "w"), indent=2)  # noqa: SIM115
 
     print(f"[m1] clearance c={c_mm:g}mm -> all_stable={all_stable}")
     print("M1_STABILITY_OK" if all_stable else "M1_STABILITY_UNSTABLE")

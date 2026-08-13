@@ -29,7 +29,6 @@ Run inside the container:
 
 from __future__ import annotations
 
-import argparse
 import csv
 import gymnasium as gym
 import math
@@ -145,7 +144,7 @@ def main():
                     "success": int(bool(succ[i].item())),
                 })
             ok = sum(r["success"] for r in results[-len(batch) :])
-            print(f"[e4] batch {b0//n_envs}: {ok}/{len(batch)} captured")
+            print(f"[e4] batch {b0 // n_envs}: {ok}/{len(batch)} captured")
 
         os.makedirs(os.path.dirname(args_cli.out) or ".", exist_ok=True)
         with open(args_cli.out, "w", newline="") as fh:

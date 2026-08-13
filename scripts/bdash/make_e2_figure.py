@@ -90,7 +90,7 @@ def main():
             capsize=4,
             lw=1.8,
             ms=6,
-            color=_LEVEL_COLOR.get(level, None),
+            color=_LEVEL_COLOR.get(level),
             label=_LEVEL_LABEL.get(level, level),
         )
         # annotate n at each point

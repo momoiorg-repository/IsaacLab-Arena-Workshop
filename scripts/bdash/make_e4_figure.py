@@ -28,7 +28,6 @@ import argparse
 import csv
 import glob
 import json
-import math
 import matplotlib
 import os
 from collections import defaultdict
@@ -42,7 +41,7 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")
 
 
 def load_conv(csv_path: str):
-    rows = list(csv.DictReader(open(csv_path)))
+    rows = list(csv.DictReader(open(csv_path)))  # noqa: SIM115
     clearance = float(rows[0]["clearance_mm"]) if rows else 0.0
     rs = sorted({float(r["r_mm"]) for r in rows})
     ths = sorted({float(r["tilt_deg"]) for r in rows})
@@ -72,7 +71,7 @@ def load_handoff(jsonl_glob: str):
     if not files:
         return None
     dx, dy = [], []
-    for line in open(files[-1]):
+    for line in open(files[-1]):  # noqa: SIM115
         d = json.loads(line)
         if d.get("handoff_dx_mm") is not None and d.get("t_handoff_s") is not None:
             dx.append(d["handoff_dx_mm"])

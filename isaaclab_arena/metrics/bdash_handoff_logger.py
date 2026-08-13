@@ -202,9 +202,9 @@ class BDashHandoffRecorder(RecorderTerm):
             gw = vp.gripper_width(env, self._names["robot"])[0].item()
             sock = env.scene[self._names["socket"]].data.root_pos_w[0]
             print(
-                f"[BDASH_DEBUG] step={int(step[0].item())} tip_z={tip[0,2].item():.4f} "
-                f"sock_z={sock[2].item():.4f} depth={depth:.4f} lat={lateral*1000:.2f}mm "
-                f"net_f={f[0].item():.2f}N finger_f={ff:.2f}N grip_w={gw*1000:.2f}mm "
+                f"[BDASH_DEBUG] step={int(step[0].item())} tip_z={tip[0, 2].item():.4f} "
+                f"sock_z={sock[2].item():.4f} depth={depth:.4f} lat={lateral * 1000:.2f}mm "
+                f"net_f={f[0].item():.2f}N finger_f={ff:.2f}N grip_w={gw * 1000:.2f}mm "
                 f"g={int(g[0].item())} h={int(h[0].item())} ins={int(ins[0].item())}",
                 flush=True,
             )
@@ -310,7 +310,7 @@ class BDashHandoffRecorder(RecorderTerm):
         for path in (self._path, fallback):
             try:
                 os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-                fh = open(path, "a")
+                fh = open(path, "a")  # noqa: SIM115
                 if path != self._path:
                     print(
                         f"[BDashHandoffLogger] '{self._path}' not writable ({last_err}); "

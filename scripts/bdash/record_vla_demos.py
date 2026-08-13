@@ -129,7 +129,7 @@ class CameraObsRecorder(RecorderTerm):
     images. Stored as obs/{wrist_cam_rgb,left_cam_rgb,right_cam_rgb} (convert_franka_to_lerobot keys)."""
 
     def record_pre_step(self):
-        cam = self._env.obs_buf.get("camera_obs", None)
+        cam = self._env.obs_buf.get("camera_obs")
         return ("obs", cam) if cam is not None else (None, None)
 
 
