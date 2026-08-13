@@ -3,9 +3,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Precision-budget handoff gate (V-DASH RSJ): make the VLA→rule-based switch *budget-aware*.
+"""Precision-budget handoff gate (B-DASH RSJ): make the VLA→rule-based switch *budget-aware*.
 
-The naive V-DASH switch latches into the insertion back-end as soon as the §3.4 handoff predicate
+The naive B-DASH switch latches into the insertion back-end as soon as the §3.4 handoff predicate
 fires (``grasped ∧ tip-in-region ∧ low-speed``) — it never checks whether the back-end can actually
 succeed from the *current grasp*. This module turns the precision budget into the switching policy:
 at the handoff moment it estimates the (otherwise blind) in-gripper grasp error from **observable
@@ -19,7 +19,7 @@ Budget model: an in-gripper tilt ``φ`` displaces the (blind) tip by ``L·sin φ
 grip to tip), so the effective tip error is ``e = l + L·sin φ``. The back-end's measured convergence
 basin tolerates ``e ≲ budget`` (≈5 mm at c=2.0; §3 basin). Gate: hand off iff ``e_est ≤ budget``.
 
-Modes (env ``VDASH_BUDGET_GATE``): unset → off (headline path unchanged); ``log`` → evaluate + log
+Modes (env ``BDASH_BUDGET_GATE``): unset → off (headline path unchanged); ``log`` → evaluate + log
 the decision but still hand off (lets us score decision-vs-outcome without perturbing dynamics);
 ``active`` → on a no-go, invoke the in-place de-cant correction before handing off (closed loop).
 """
@@ -35,12 +35,12 @@ class BudgetGate:
     """Estimate the in-gripper grasp error from observable signals and gate the handoff on the budget."""
 
     def __init__(self):
-        mode = (os.environ.get("VDASH_BUDGET_GATE", "") or "").lower()
+        mode = (os.environ.get("BDASH_BUDGET_GATE", "") or "").lower()
         self.enabled = mode in ("log", "active", "correct", "1", "on", "true")
         self.active = mode in ("active", "correct")
-        self.gain = float(os.environ.get("VDASH_DECANT_GAIN", "0.7") or "0.7")  # finger dz (N) per deg
-        self.L_mm = float(os.environ.get("VDASH_GATE_L_MM", "60") or "60")  # grip->tip lever (mm)
-        self.budget_mm = float(os.environ.get("VDASH_GATE_BUDGET_MM", "5") or "5")  # back-end tolerance (mm)
+        self.gain = float(os.environ.get("BDASH_DECANT_GAIN", "0.7") or "0.7")  # finger dz (N) per deg
+        self.L_mm = float(os.environ.get("BDASH_GATE_L_MM", "60") or "60")  # grip->tip lever (mm)
+        self.budget_mm = float(os.environ.get("BDASH_GATE_BUDGET_MM", "5") or "5")  # back-end tolerance (mm)
 
     def _tilt_from_fingers(self, env, sensor_name: str):
         """Observable in-gripper tilt estimate (deg) and raw dz (N) from per-finger force-z asymmetry."""

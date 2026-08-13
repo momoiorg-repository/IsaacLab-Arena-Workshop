@@ -7,12 +7,12 @@
 
 Composes the Franka embodiment, a vertical 3-jaw power chuck (body plus three kinematic jaws), a
 coarse tray of mixed workpieces, a touch-off datum block, a V-block, a background table and a dome
-light. Physics uses the same FORGE-grade callback as the V-DASH assembly task
-(:func:`~isaaclab_arena_environments.mdp.env_callbacks.vdash_assembly_env_cfg_callback`), which is
+light. Physics uses the same FORGE-grade callback as the B-DASH assembly task
+(:func:`~isaaclab_arena_environments.mdp.env_callbacks.bdash_assembly_env_cfg_callback`), which is
 tuned for contact-rich insertion and applies unchanged here.
 
-Scene layout and spawn ranges come from ``configs/bdash/task.yaml``; asset geometry comes from
-``configs/bdash/assets.yaml`` via :mod:`isaaclab_arena_environments.mdp.bdash_assets`. Nothing is
+Scene layout and spawn ranges come from ``configs/bdash/chuck_load/task.yaml``; asset geometry comes from
+``configs/bdash/chuck_load/assets.yaml`` via :mod:`isaaclab_arena_environments.mdp.bdash_chuck_assets`. Nothing is
 restated in this file, so the scene cannot drift from the meshes that were generated.
 
 Workpieces spawn at arbitrary pose, including lying on their side. A side-lying cylinder cannot
@@ -46,12 +46,12 @@ class BDashChuckLoadEnvironment(ExampleEnvironmentBase):
         from isaaclab_arena.tasks.no_task import NoTask
         from isaaclab_arena.utils.pose import Pose
         from isaaclab_arena_environments import mdp
-        from isaaclab_arena_environments.mdp import bdash_assets
-        from isaaclab_arena_environments.mdp.bdash_config import load_task_cfg
+        from isaaclab_arena_environments.mdp import bdash_chuck_assets
+        from isaaclab_arena_environments.mdp.bdash_chuck_config import load_task_cfg
 
         task_cfg = load_task_cfg()
         scene_cfg = task_cfg["scene"]
-        chuck_geom = bdash_assets.chuck_geometry()
+        chuck_geom = bdash_chuck_assets.chuck_geometry()
 
         variants = self._resolve_variants(args_cli.variants)
 
@@ -76,7 +76,7 @@ class BDashChuckLoadEnvironment(ExampleEnvironmentBase):
             enable_cameras=args_cli.enable_cameras,
             initial_joint_pose=scene_cfg["initial_joint_pose"],
         )
-        embodiment.scene_config.robot = mdp.FRANKA_PANDA_VDASH_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+        embodiment.scene_config.robot = mdp.FRANKA_PANDA_BDASH_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
         teleop_device = (
             self.device_registry.get_device_by_name(args_cli.teleop_device)()
@@ -153,7 +153,7 @@ class BDashChuckLoadEnvironment(ExampleEnvironmentBase):
         A fraction are laid on their side, which is the case the chuck cannot accept directly.
         """
         from isaaclab_arena.utils.pose import Pose
-        from isaaclab_arena_environments.mdp import bdash_assets
+        from isaaclab_arena_environments.mdp import bdash_chuck_assets
 
         spawn = task_cfg["tray_spawn"]
         tray_x, tray_y, tray_z = scene_cfg["tray_pose"]
@@ -164,7 +164,7 @@ class BDashChuckLoadEnvironment(ExampleEnvironmentBase):
         index = 0
         total = len(variants) * per_variant
         for variant in variants:
-            asset_name = bdash_assets.BDASH_WORKPIECE_BY_VARIANT[variant]
+            asset_name = bdash_chuck_assets.BDASH_WORKPIECE_BY_VARIANT[variant]
             for copy_idx in range(per_variant):
                 # unique instance_name per copy — see the jaw comment above
                 obj = self.asset_registry.get_asset_by_name(asset_name)(
@@ -193,14 +193,16 @@ class BDashChuckLoadEnvironment(ExampleEnvironmentBase):
 
     @staticmethod
     def _resolve_variants(spec: str) -> list[str]:
-        from isaaclab_arena_environments.mdp import bdash_assets
+        from isaaclab_arena_environments.mdp import bdash_chuck_assets
 
         if spec in ("all", "", None):
-            return list(bdash_assets.BDASH_VARIANTS)
+            return list(bdash_chuck_assets.BDASH_VARIANTS)
         wanted = [v.strip().upper() for v in spec.split(",") if v.strip()]
-        unknown = [v for v in wanted if v not in bdash_assets.BDASH_WORKPIECE_BY_VARIANT]
+        unknown = [v for v in wanted if v not in bdash_chuck_assets.BDASH_WORKPIECE_BY_VARIANT]
         if unknown:
-            raise ValueError(f"unknown workpiece variant(s) {unknown}; known: {list(bdash_assets.BDASH_VARIANTS)}")
+            raise ValueError(
+                f"unknown workpiece variant(s) {unknown}; known: {list(bdash_chuck_assets.BDASH_VARIANTS)}"
+            )
         return wanted
 
     @staticmethod
@@ -223,17 +225,17 @@ class BDashChuckLoadEnvironment(ExampleEnvironmentBase):
 def bdash_env_cfg_callback(env_cfg):
     """FORGE-grade assembly physics, plus this task's side-camera framing.
 
-    The chuck-loading scene is much wider than the vdash peg workspace, so the shared
+    The chuck-loading scene is much wider than the bdash peg workspace, so the shared
     ``FrankaCameraCfg`` focal length of 8.0 clips it. Overriding here rather than in
     ``isaaclab_arena/embodiments/franka/franka.py`` is deliberate: that default is what the
-    V-DASH v6 model was trained at and its published results are frozen against it.
+    B-DASH v6 model was trained at and its published results are frozen against it.
 
     ``BDASH_SIDE_FOCAL`` overrides the configured value for framing experiments.
     """
     from isaaclab_arena_environments import mdp
-    from isaaclab_arena_environments.mdp.bdash_config import load_task_cfg
+    from isaaclab_arena_environments.mdp.bdash_chuck_config import load_task_cfg
 
-    env_cfg = mdp.vdash_assembly_env_cfg_callback(env_cfg)
+    env_cfg = mdp.bdash_assembly_env_cfg_callback(env_cfg)
 
     focal = float(os.environ.get("BDASH_SIDE_FOCAL") or load_task_cfg()["cameras"]["side_focal_length"])
     for cam_name in ("left_cam", "right_cam"):

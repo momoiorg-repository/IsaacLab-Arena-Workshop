@@ -1,0 +1,2 @@
+policy,clearance_mm,level,n,success,success_rate,ci95_low,ci95_high,insert_force_median_N,handoff_fired,jsonl
+bdash_scripted,2.0,L1,22,15,0.6818,0.4732,0.8364,12.591,22,bdash_handoff_grid_bdash_scripted_c2.0_L1_20260627_093921.jsonl

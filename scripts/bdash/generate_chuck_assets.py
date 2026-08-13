@@ -9,17 +9,17 @@ Builds the multi-variant machine-tending scene: three yaw-symmetric workpieces, 
 3-jaw power chuck (body + one jaw, spawned three times at 120 deg), a coarse tray, a
 touch-off datum block, and a V-block for re-erecting side-lying stock.
 
-Pipeline is the same as ``scripts/vdash/generate_assets.py``: trimesh CSG (manifold engine)
+Pipeline is the same as ``scripts/bdash/generate_assets.py``: trimesh CSG (manifold engine)
 -> STL (Z-up) -> Isaac Lab ``MeshConverter`` -> USD. ``MeshConverter`` wraps
 omni.kit.asset_converter, so the Simulation App must be running; hence the AppLauncher
-boilerplate. ``frustum``/``to_usd``/``_mesh_collision_cfg`` are duplicated from the vdash
+boilerplate. ``frustum``/``to_usd``/``_mesh_collision_cfg`` are duplicated from the bdash
 generator rather than imported, because that module runs argparse + AppLauncher at import
 time and cannot be imported as a library.
 
 Design notes that are load-bearing:
   * Every workpiece is a body of revolution => yaw-symmetric => the grasp stays position-only
     on the yaw axis. A yaw-relevant grip was previously found unlearnable (corr(yaw, wrist)
-    = -0.93 -> 0% grasp); see build_peg in the vdash generator.
+    = -0.93 -> 0% grasp); see build_peg in the bdash generator.
   * Jaws are KINEMATIC (env closes them, then a fixed joint holds the part), so there is no
     articulation and no URDF step. The jaw is emitted as its own mesh.
   * Jaws recess flush into the chuck face so the top face stays a clean seating annulus for
@@ -38,7 +38,7 @@ import os
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Generate B-DASH chuck-loading USDs.")
-parser.add_argument("--config", type=str, default="configs/bdash/assets.yaml")
+parser.add_argument("--config", type=str, default="configs/bdash/chuck_load/assets.yaml")
 parser.add_argument("--out", type=str, default=None, help="Output dir (overrides config output_dir).")
 parser.add_argument(
     "--only",
@@ -240,7 +240,7 @@ def build_vblock(v: dict, sections: int) -> trimesh.Trimesh:
 
 
 # --------------------------------------------------------------------------------------
-# USD conversion (mirrors scripts/vdash/generate_assets.py)
+# USD conversion (mirrors scripts/bdash/generate_assets.py)
 # --------------------------------------------------------------------------------------
 def _mesh_collision_cfg(approximation: str, sdf_resolution: int):
     if approximation == "sdf":

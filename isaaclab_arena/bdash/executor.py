@@ -6,9 +6,9 @@
 """B-DASH executor: turn an organizer plan into an evaluation run.
 
 Maps the assigned front-end skill to the corresponding registered policy of
-`scripts/vdash/run_eval_grid.py` and carries the gate configuration as
+`scripts/bdash/run_eval_grid.py` and carries the gate configuration as
 environment variables. The gate itself and the rule-based back-end are already
-wired inside the vdash policies; this module only orchestrates.
+wired inside the bdash policies; this module only orchestrates.
 
 Usage (dry run, host or container):
   python3 -m isaaclab_arena.bdash.executor --task "insert the peg" \
@@ -28,11 +28,11 @@ from isaaclab_arena.bdash import contracts, organizer
 
 REPO = "/workspaces/isaaclab_arena"
 PYTHON = "/isaac-sim/python.sh"
-GRID = "scripts/vdash/run_eval_grid.py"
+GRID = "scripts/bdash/run_eval_grid.py"
 
 
 def build_run(
-    plan: dict, episodes: int = 20, seed: int = 0, out_csv: str = "results/vdash/bdash_demo.csv"
+    plan: dict, episodes: int = 20, seed: int = 0, out_csv: str = "results/bdash/bdash_demo.csv"
 ) -> dict | None:
     """Build the command + env for an executable plan. None if plan infeasible."""
     if not plan.get("feasible"):
@@ -57,7 +57,7 @@ def build_run(
         "--seed",
         str(seed),
         "--log_dir",
-        "logs/vdash",
+        "logs/bdash",
         "--no_resume",
         "--out",
         out_csv,
@@ -71,7 +71,7 @@ def main() -> None:
     ap.add_argument("--clearance", type=float, default=2.0)
     ap.add_argument("--episodes", type=int, default=20)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--out", default="results/vdash/bdash_demo.csv")
+    ap.add_argument("--out", default="results/bdash/bdash_demo.csv")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 

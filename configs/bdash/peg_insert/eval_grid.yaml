@@ -1,0 +1,19 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# B-DASH evaluation grid (brief §3 M4). Each cell = policy × clearance × level, run seed-fixed for
+# `num_episodes` trials via policy_runner; the per-episode §3.5 JSONL written by the bdash handoff
+# logger is the source of truth. run_eval_grid.py orchestrates one subprocess per cell (each needs a
+# fresh Isaac Sim process), is resumable (a cell whose JSONL already has >= num_episodes records is
+# skipped), and aggregates to CSV with success rate ± 95% Wilson CI.
+policies: [bdash_scripted]
+clearances_mm: [2.0, 1.0, 0.5, 0.25]
+levels: [L0, L1, L2, L3]
+num_episodes: 50
+num_envs: 8
+seed: 0
+env: bdash_pick_insert
+log_dir: logs/bdash
+out_csv: results/bdash/eval_grid.csv

@@ -35,19 +35,19 @@ FRANKA_PANDA_ASSEMBLY_HIGH_PD_CFG.init_state.pos = (0.0, 0.0, 0.0)
 
 
 # ===========================================================================================
-# Franka Panda configuration for V-DASH (scripted pick + force-control insertion).
+# Franka Panda configuration for B-DASH (scripted pick + force-control insertion).
 #
 # Keeps the *stiffer* HIGH_PD gains (400) for practical free-space speed during pick/transport —
 # the assembly cfg above softens to 150, which makes the arm too slow (~0.04 m/s) to finish a
 # pick+insert inside the episode and tanks eval throughput. Insertion compliance is provided by the
-# controller's force-limited press + spiral search (configs/vdash/controllers.yaml), not a soft arm.
+# controller's force-limited press + spiral search (configs/bdash/peg_insert/controllers.yaml), not a soft arm.
 # Contact sensors are enabled (peg/finger ContactSensors) and base-link gravity disabled for control
 # stability (HIGH_PD already disables gravity; set explicitly for clarity).
 # ===========================================================================================
-FRANKA_PANDA_VDASH_CFG = FRANKA_PANDA_HIGH_PD_CFG.copy()
-FRANKA_PANDA_VDASH_CFG.spawn.activate_contact_sensors = True
-FRANKA_PANDA_VDASH_CFG.spawn.rigid_props.disable_gravity = True
-FRANKA_PANDA_VDASH_CFG.init_state.pos = (0.0, 0.0, 0.0)
+FRANKA_PANDA_BDASH_CFG = FRANKA_PANDA_HIGH_PD_CFG.copy()
+FRANKA_PANDA_BDASH_CFG.spawn.activate_contact_sensors = True
+FRANKA_PANDA_BDASH_CFG.spawn.rigid_props.disable_gravity = True
+FRANKA_PANDA_BDASH_CFG.init_state.pos = (0.0, 0.0, 0.0)
 
 # Lower resting arm pose: the stock HIGH_PD home (joint2 -0.569, joint4 -2.810) holds the gripper
 # high above the table. Lean the shoulder forward and open the elbow so the gripper starts lower /
@@ -59,7 +59,7 @@ FRANKA_PANDA_VDASH_CFG.init_state.pos = (0.0, 0.0, 0.0)
 # [0, -0.785, -0.1107, -1.1775, 0, 0.785, 0.785, ...]) overrides it every reset. Probed post-reset
 # joint_pos is the event pose regardless of the values below. Left as-is; change the event to actually
 # move the start pose.
-FRANKA_PANDA_VDASH_CFG.init_state.joint_pos = {
+FRANKA_PANDA_BDASH_CFG.init_state.joint_pos = {
     "panda_joint1": 0.0,
     "panda_joint2": -0.10,  # was -0.569: shoulder forward/down -> lowers gripper
     "panda_joint3": 0.0,

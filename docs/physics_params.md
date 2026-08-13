@@ -1,6 +1,6 @@
 # Physics Parameters — Factory / FORGE PegInsert (M0)
 
-Extracted from Isaac Lab **2.3.2** (`submodules/IsaacLab`), the source-of-truth for V-DASH
+Extracted from Isaac Lab **2.3.2** (`submodules/IsaacLab`), the source-of-truth for B-DASH
 contact-rich insertion physics. Per the brief §4.2, **FORGE** is the chosen base (adds
 force/torque sensing + noise). FORGE inherits all simulation/asset physics from Factory and
 only overrides the controller, observations (adds `ft_force`, `force_threshold`), and
@@ -42,7 +42,7 @@ Sources:
 | `solver_velocity_iteration_count` | 1 | all |
 | `max_depenetration_velocity` | 5.0 | all |
 | `max_contact_impulse` | 1e32 | all |
-| `collision_props.contact_offset` | **0.0002** (V-DASH; Factory ref 0.005) | all |
+| `collision_props.contact_offset` | **0.0002** (B-DASH; Factory ref 0.005) | all |
 | `collision_props.rest_offset` | **0.0** | all |
 | `disable_gravity` | **held(peg)=True**, fixed(hole)=False, robot=True | held floats in gripper |
 | asset surface friction | **0.75** | peg, hole, robot fingerpad (`*AssetCfg.friction`) |
@@ -108,13 +108,13 @@ Operational-space impedance controller (the reusable core for `insertion_control
 ## 6. Mapping to our env callback (`mdp/env_callbacks.py`)
 
 The existing `assembly_env_cfg_callback` currently uses **dt=1/60, decimation=2** and lower
-iteration counts — **not FORGE-grade**. M1 introduces `vdash_assembly_env_cfg_callback` applying
+iteration counts — **not FORGE-grade**. M1 introduces `bdash_assembly_env_cfg_callback` applying
 the §1–§2 values (dt=1/120, pos_iter=192, contact_offset=0.0002, rest_offset=0.0,
 friction=1.0/asset-0.75, gpu_max_num_partitions=1), and wires ContactSensors per §4.
 
-> **contact_offset note:** the runtime uses **0.0002 m** (`configs/vdash/assets.yaml:26`), not Factory's
+> **contact_offset note:** the runtime uses **0.0002 m** (`configs/bdash/peg_insert/assets.yaml:26`), not Factory's
 > 0.005 — the 5 mm Factory offset exceeds the tightest clearance (0.25 mm) and blocks bore entry. The
-> deviation is deliberate; this doc lists the V-DASH value with the Factory reference for provenance.
+> deviation is deliberate; this doc lists the B-DASH value with the Factory reference for provenance.
 
 ---
 
@@ -122,7 +122,7 @@ friction=1.0/asset-0.75, gpu_max_num_partitions=1), and wires ContactSensors per
 
 | Param | Before | After | Where |
 |---|---|---|---|
-| peg `max_depenetration_velocity` | 5.0 m/s (shared `RIGID_BODY_PROPS_HIGH_PRECISION`) | **1.0 m/s** | `isaaclab_arena_environments/mdp/vdash_assets.py` (`_PEG_RIGID_PROPS`, vdash-local deepcopy — shared constant untouched per §2.2) |
+| peg `max_depenetration_velocity` | 5.0 m/s (shared `RIGID_BODY_PROPS_HIGH_PRECISION`) | **1.0 m/s** | `isaaclab_arena_environments/mdp/bdash_peg_assets.py` (`_PEG_RIGID_PROPS`, bdash-local deepcopy — shared constant untouched per §2.2) |
 
 **Why:** brief §3 M3b, to soften the M1 known-risk SDF force spike at axis-misaligned initial
 conditions. **Stability re-check (§2.3):** scripted pick→insert, L1, seed-fixed.

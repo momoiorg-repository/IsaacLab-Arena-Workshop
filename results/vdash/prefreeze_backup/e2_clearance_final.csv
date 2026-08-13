@@ -1,9 +1,0 @@
-policy,clearance_mm,level,n,success,success_rate,ci95_low,ci95_high,insert_force_median_N,handoff_fired,jsonl
-vdash_scripted,2.0,L0,50,50,1.0,0.9286,1.0,15.886,50,vdash_handoff_grid_vdash_scripted_c2.0_L0_20260626_041705.jsonl
-vdash_scripted,2.0,L1,50,49,0.98,0.895,0.9965,0.605,50,vdash_handoff_grid_vdash_scripted_c2.0_L1_20260626_041812.jsonl
-vdash_scripted,1.0,L0,50,0,0.0,0.0,0.0714,16.202,50,vdash_handoff_grid_vdash_scripted_c1.0_L0_20260626_041929.jsonl
-vdash_scripted,1.0,L1,50,0,0.0,0.0,0.0714,16.282,50,vdash_handoff_grid_vdash_scripted_c1.0_L1_20260626_042053.jsonl
-vdash_scripted,0.5,L0,50,0,0.0,0.0,0.0714,16.089,50,vdash_handoff_grid_vdash_scripted_c0.5_L0_20260626_042221.jsonl
-vdash_scripted,0.5,L1,50,0,0.0,0.0,0.0714,15.579,50,vdash_handoff_grid_vdash_scripted_c0.5_L1_20260626_042345.jsonl
-vdash_scripted,0.25,L0,50,0,0.0,0.0,0.0714,16.001,50,vdash_handoff_grid_vdash_scripted_c0.25_L0_20260626_042513.jsonl
-vdash_scripted,0.25,L1,50,0,0.0,0.0,0.0714,15.4,50,vdash_handoff_grid_vdash_scripted_c0.25_L1_20260626_042636.jsonl

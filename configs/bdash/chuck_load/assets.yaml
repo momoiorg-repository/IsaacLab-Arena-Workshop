@@ -1,0 +1,108 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# B-DASH parametric chuck-loading asset generation (units: meters)
+# Scene: Franka picks a workpiece from a coarse tray and loads it into a vertical
+# 3-jaw power chuck. Three yaw-symmetric workpiece variants; per-variant tolerances
+# are what the precision budget is measured against.
+#
+# Orientation convention for every workpiece: built along +Z with z=0 at the LEADING
+# end (the end that enters the chuck). Both ends are chamfered (deburred stock).
+units: meters
+
+# --------------------------------------------------------------------------------------
+# Workpieces. `sections` are stacked bottom (z=0, leading end) -> top, as (diameter, length).
+# All variants are bodies of revolution => yaw-symmetric => grasp stays position-only on the
+# yaw axis. (See generate_assets.py build_peg: a yaw-relevant grip was unlearnable.)
+# --------------------------------------------------------------------------------------
+# EVERY variant leads with the Ø25 shaft, so the jaws' lower step grips Ø25 in all three
+# cases and only the datum differs. What varies is how the axial stop is defined:
+#   W-A  no stop      -> protrusion is whatever the robot commanded (pure insertion-depth error)
+#   W-B  measured     -> the Ø32 shoulder is the reference protrusion is measured TO (it does not
+#                        seat: Ø32 < bore Ø40, so it passes into the bore)
+#   W-C  hard seat    -> the Ø45 flange cannot enter the Ø40 bore, so it lands on the chuck face
+workpieces:
+  W-A:                          # plain cylinder — baseline; protrusion error shows up cleanly
+    sections: [[0.025, 0.090]]
+    mass: 0.119                 # aluminium 2700 kg/m^3
+    tolerance:                  # per-variant acceptance (filled from the R(g) sweep, §6)
+      seat_angle_deg: 2.0
+      protrusion_mm: 2.0
+  W-B:                          # stepped — the shoulder is the protrusion datum (measured, not seated)
+    sections: [[0.025, 0.060], [0.032, 0.040]]
+    mass: 0.166
+    tolerance:
+      seat_angle_deg: 2.0
+      protrusion_mm: 1.5
+  W-C:                          # flanged — flange hard-seats on the chuck face; tightest seat angle
+    sections: [[0.025, 0.072], [0.045, 0.008]]
+    mass: 0.130
+    tolerance:
+      seat_angle_deg: 1.0
+      protrusion_mm: 2.0
+
+workpiece_common:
+  end_chamfer: 0.0008           # C0.8 lead-in at both ends
+
+# --------------------------------------------------------------------------------------
+# 3-jaw power chuck, vertical axis, bore opening upward. Jaws are KINEMATIC (close +
+# fixed joint), so no articulation/URDF is needed — the body and one jaw are separate
+# meshes and the environment spawns the jaw three times at 120 deg.
+# --------------------------------------------------------------------------------------
+chuck:
+  body_diameter: 0.160          # 6-inch class (Kitagawa B-200 series is ~0.169)
+  body_height: 0.080
+  bore_diameter: 0.040          # MUST be < W-C flange Ø45 so the flange seats on the face,
+                                # and > W-B step Ø32 so the stepped shaft still passes through
+  jaw_slot_clearance: 0.001     # per-side slack in the radial jaw slots
+  mass: 8.0                     # heavy fixture; spawned kinematic so mass is nominal
+
+chuck_jaw:                      # 生爪: stepped gripping face, Ø25 low / Ø32 high.
+                                # Recessed flush into the chuck face so the top face stays a clean
+                                # seating annulus for W-C; jaws reach inward past the bore wall.
+  width: 0.030
+  radial_length: 0.035
+  height: 0.025
+  step_height: 0.012            # lower step grips Ø25, upper step grips Ø32
+  radius_low: 0.0125            # closed-position inner radius, lower step  (Ø25/2)
+  radius_high: 0.0160           # closed-position inner radius, upper step  (Ø32/2)
+  mass: 0.4
+
+# --------------------------------------------------------------------------------------
+# Fixtures
+# --------------------------------------------------------------------------------------
+tray:                           # coarse open tray, no dividers
+  outer: [0.300, 0.200, 0.030]
+  wall: 0.005
+  floor: 0.005
+  mass: 0.5
+
+touchoff_block:                 # datum block: top face + two orthogonal side faces
+  size: [0.060, 0.060, 0.040]
+  mass: 1.0
+
+vblock:                         # 90 deg V-groove, axis along X; re-erects a side-lying workpiece
+  size: [0.080, 0.060, 0.040]
+  groove_angle_deg: 90.0
+  groove_depth: 0.020
+  mass: 0.8
+
+# --------------------------------------------------------------------------------------
+collision:
+  contact_offset: 0.0002        # 0.2mm, same rationale as bdash: must stay below the tightest fit
+  rest_offset: 0.0
+  sdf_resolution: 1024
+  # per-asset approximation
+  workpiece_approximation: convexDecomposition   # stacked cylinders = few convex parts
+  chuck_body_approximation: sdf                  # a through-bore cannot be a convex hull
+  jaw_approximation: convexDecomposition         # stepped block = 2 convex parts
+  tray_approximation: convexDecomposition        # floor + 4 walls
+  vblock_approximation: convexDecomposition      # groove splits it into 2 convex halves
+  block_approximation: convexHull                # plain box
+
+mesh:
+  circle_sections: 256          # matches bdash; fine tessellation for clean SDF normals
+
+output_dir: assets/bdash/chuck_load

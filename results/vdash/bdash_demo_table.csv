@@ -1,4 +1,0 @@
-clearance_mm,feasible,chosen_skill,predicted_success,measured_success,n,note
-2.0,True,scripted_pick,0.99,1.0,20,policy=vdash_scripted
-1.5,True,scripted_pick,0.742,0.75,20,policy=vdash_scripted
-1.25,False,-,0.0,-,0,rejected by contract check

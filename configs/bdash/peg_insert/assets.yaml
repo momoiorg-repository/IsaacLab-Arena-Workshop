@@ -1,0 +1,40 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# B-DASH parametric peg-in-hole asset generation (units: meters)
+# Brief §3.1/§3.2: peg Ø8.0 mm, socket 60×60×30 mm, bore depth 25 mm, C0.5 chamfers,
+# hole diameter = 8.0 + 2c  ->  bore_radius = shaft_radius + c  (c = radial clearance, mm).
+units: meters
+
+peg:
+  shaft_diameter: 0.008      # Ø8.0 mm
+  shaft_length: 0.050        # 50 mm
+  tip_chamfer: 0.0005        # C0.5 lead-in at the tip
+  grip_size: 0.020           # 20×20×20 mm prismatic grip on top
+  mass: 0.019                # matches Factory peg mass
+
+socket:
+  outer_xy: 0.060            # 60 mm square footprint
+  height: 0.030             # 30 mm tall
+  bore_depth: 0.025         # 25 mm deep blind bore
+  mouth_chamfer: 0.0005     # C0.5 fine edge (kept for reference)
+  countersink_depth: 0.0030  # 3 mm conical lead-in funnel at the mouth (rule-based insertion aid)
+  countersink_radius: 0.0030 # funnel widens the opening by 3 mm (45°); bore clearance c unchanged
+  mass: 0.050               # matches Factory hole mass
+
+# Radial clearance series c (mm). bore_radius = shaft_radius + c.
+clearances_mm: [2.0, 1.0, 0.5, 0.25]
+
+collision:
+  contact_offset: 0.0002     # 0.2mm — must be < tightest clearance (0.25mm); 5mm (Factory) blocks entry
+  rest_offset: 0.0
+  socket_approximation: sdf            # bore REQUIRES SDF mesh collision
+  sdf_resolution: 1024                 # PhysX SDF grid resolution (60mm AABB/1024 = 0.06mm voxel)
+  peg_approximation: convexDecomposition  # cylinder+grip = exact as 2 convex parts
+
+mesh:
+  circle_sections: 256       # fine tessellation of bore/shaft for clean SDF normals
+
+output_dir: assets/bdash/peg_insert

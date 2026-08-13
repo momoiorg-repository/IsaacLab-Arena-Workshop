@@ -1,0 +1,2 @@
+policy,clearance_mm,level,n,success,success_rate,ci95_low,ci95_high,insert_force_median_N,handoff_fired,jsonl
+bdash_vla_v5_vision,2.0,L1,20,0,0.0,0.0,0.1611,0.0,0,bdash_handoff_grid_bdash_vla_v5_vision_c2.0_L1_20260625_005854.jsonl

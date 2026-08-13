@@ -55,12 +55,12 @@ class InsertionController:
         self.names = names
         self.mouth_height = mouth_height
         self.ee_cfg = ee_cfg
-        # Tuning hook (default off): VDASH_INS_<KEY> overrides any insertion-config value, e.g.
-        # VDASH_INS_RCC_ROT_GAIN, VDASH_INS_F_TARGET, VDASH_INS_PRESS_FORCE_BAND. Used to sweep the
+        # Tuning hook (default off): BDASH_INS_<KEY> overrides any insertion-config value, e.g.
+        # BDASH_INS_RCC_ROT_GAIN, BDASH_INS_F_TARGET, BDASH_INS_PRESS_FORCE_BAND. Used to sweep the
         # back-end's robustness to tilted/offset grasps (tip-over reduction) without editing the yaml.
         self.cfg = dict(ins_cfg)
         for _k in list(self.cfg.keys()):
-            _v = os.environ.get("VDASH_INS_" + _k.upper())
+            _v = os.environ.get("BDASH_INS_" + _k.upper())
             if _v in (None, ""):
                 continue
             _cur = self.cfg[_k]
@@ -74,58 +74,58 @@ class InsertionController:
         # DIAGNOSTIC ORACLE (default off, VIOLATES §2.1): feed the controller the peg's TRUE tip so its
         # assumed tip == true tip. This is the M11 "cheat" upper bound that proves the blind in-gripper
         # grasp error is the binding constraint (8 mm offset: 0/20 -> 11/20). NOT a proposed solution.
-        self._cheat_tip = bool(os.environ.get("VDASH_CHEAT_TIP"))
+        self._cheat_tip = bool(os.environ.get("BDASH_CHEAT_TIP"))
         # Estimator-noise study (default 0): add a frozen per-episode Gaussian LATERAL error (mm) to the
         # oracle correction. Sweeping it characterizes R_widened(σ) — how accurate a §2.1 grasp-pose
         # estimate must be to recover success — and sets the spec for the tactile probe (Phase 2b).
-        self._tip_noise_mm = float(os.environ.get("VDASH_TIP_NOISE_MM", "0") or "0")
+        self._tip_noise_mm = float(os.environ.get("BDASH_TIP_NOISE_MM", "0") or "0")
         # §2.1-honest tactile CALIBRATE probe (default off): before inserting, actively touch a grid of
         # assumed-tip xy against the known socket fixture and read the wrist-F/T model to localize the
         # bore relative to the (blind) assumed tip -> estimate the in-gripper error e and correct
         # tip_estimate. Inputs are proprioception + socket pose + F/T only (no peg ground-truth).
-        self._tactile_cal = bool(os.environ.get("VDASH_TACTILE_CAL"))
-        self._cal_half_mm = float(os.environ.get("VDASH_CAL_HALF_MM", "12") or "12")  # grid half-extent (mm)
-        self._cal_step_mm = float(os.environ.get("VDASH_CAL_STEP_MM", "6") or "6")  # grid spacing (mm)
-        self._cal_safe_clear = float(os.environ.get("VDASH_CAL_SAFE_MM", "12") or "12") / 1000.0  # rise between touches
+        self._tactile_cal = bool(os.environ.get("BDASH_TACTILE_CAL"))
+        self._cal_half_mm = float(os.environ.get("BDASH_CAL_HALF_MM", "12") or "12")  # grid half-extent (mm)
+        self._cal_step_mm = float(os.environ.get("BDASH_CAL_STEP_MM", "6") or "6")  # grid spacing (mm)
+        self._cal_safe_clear = float(os.environ.get("BDASH_CAL_SAFE_MM", "12") or "12") / 1000.0  # rise between touches
         self._cal_max_depth = (
-            float(os.environ.get("VDASH_CAL_DEPTH_MM", "6") or "6") / 1000.0
+            float(os.environ.get("BDASH_CAL_DEPTH_MM", "6") or "6") / 1000.0
         )  # probe floor below mouth
-        self._cal_lead = float(os.environ.get("VDASH_CAL_LEAD_MM", "20") or "20") / 1000.0  # fast GOTO lead/step
-        self._cal_desc_lead = float(os.environ.get("VDASH_CAL_DESCLEAD_MM", "6") or "6") / 1000.0  # gentle DESCEND lead
+        self._cal_lead = float(os.environ.get("BDASH_CAL_LEAD_MM", "20") or "20") / 1000.0  # fast GOTO lead/step
+        self._cal_desc_lead = float(os.environ.get("BDASH_CAL_DESCLEAD_MM", "6") or "6") / 1000.0  # gentle DESCEND lead
         #   (soft arm follows the lead with lag; GOTO travels fast, DESCEND is gentle for clean contact-z)
         self._cal_f_touch = float(
-            os.environ.get("VDASH_CAL_FTOUCH_N", "2.0") or "2.0"
+            os.environ.get("BDASH_CAL_FTOUCH_N", "2.0") or "2.0"
         )  # contact threshold (N over baseline)
-        self._cal_xy_tol = float(os.environ.get("VDASH_CAL_XYTOL_MM", "2.0") or "2.0") / 1000.0
+        self._cal_xy_tol = float(os.environ.get("BDASH_CAL_XYTOL_MM", "2.0") or "2.0") / 1000.0
         self._cal_z_tol = 0.003
         self._cal_pen_margin = (
-            float(os.environ.get("VDASH_CAL_PENMARGIN_MM", "2.0") or "2.0") / 1000.0
+            float(os.environ.get("BDASH_CAL_PENMARGIN_MM", "2.0") or "2.0") / 1000.0
         )  # ignore funnel-lip noise
         # §2.1 EE de-cant (default off): estimate in-gripper TILT from the per-finger contact-force
         # z-asymmetry (gripper's own sensing, NOT peg pose — the net wrench cancels but the per-finger
         # moment doesn't) and rotate the straight-down hold so the cocked peg becomes vertical.
-        self._decant = bool(os.environ.get("VDASH_DECANT"))
-        self._decant_gain = float(os.environ.get("VDASH_DECANT_GAIN", "0.7") or "0.7")  # finger dz (N) per deg
-        self._decant_sign = float(os.environ.get("VDASH_DECANT_SIGN", "1") or "1")  # +1 straightens (validated)
+        self._decant = bool(os.environ.get("BDASH_DECANT"))
+        self._decant_gain = float(os.environ.get("BDASH_DECANT_GAIN", "0.7") or "0.7")  # finger dz (N) per deg
+        self._decant_sign = float(os.environ.get("BDASH_DECANT_SIGN", "1") or "1")  # +1 straightens (validated)
         # §2.1 observable tip correction from the de-cant cue (default off): estimate the in-gripper cock from
         # dz and shift the assumed tip by ~L*sin(phi) laterally — an observable approximation of the oracle
-        # (VDASH_CHEAT_TIP) that recovered 0->11/20. Unlike de-cant (which rotates the hold and tilts the
+        # (BDASH_CHEAT_TIP) that recovered 0->11/20. Unlike de-cant (which rotates the hold and tilts the
         # press), this corrects the tip the controller servos to, keeping the press straight.
-        self._gate_correct = bool(os.environ.get("VDASH_GATE_CORRECT"))
-        self._gate_L_mm = float(os.environ.get("VDASH_GATE_L_MM", "60") or "60")  # grip->tip lever (mm)
+        self._gate_correct = bool(os.environ.get("BDASH_GATE_CORRECT"))
+        self._gate_L_mm = float(os.environ.get("BDASH_GATE_L_MM", "60") or "60")  # grip->tip lever (mm)
         # §2.1 in-hand RE-ALIGN (default off): soften the finger grip (low stiffness) so a peg held at a
         # tilt can PIVOT within the gripper while the socket mouth guides it straight — an extrinsic-
         # dexterity / gravitational-pivoting effect. Unlike de-cant (rigid wrist rotation, which tilts the
         # press), this lets the PEG re-orient relative to the gripper while the wrist/press stay vertical.
         # Uses only the gripper (no peg pose), §2.1-legal.
-        self._realign = bool(os.environ.get("VDASH_REALIGN"))
+        self._realign = bool(os.environ.get("BDASH_REALIGN"))
         self._grip_stiff = float(
-            os.environ.get("VDASH_GRIP_STIFF", "300") or "300"
+            os.environ.get("BDASH_GRIP_STIFF", "300") or "300"
         )  # compliant finger stiffness when loaded
         # soft window: soften for the first N contact steps (let the peg pivot vertical), then RE-FIRM so
         # the spiral search runs on a straight peg and recovers the residual LATERAL offset. 0 = soft while
         # loaded (no re-firm; fixes tilt only). >0 = re-firm after the window (aims to also cover lateral).
-        self._realign_soft_steps = int(float(os.environ.get("VDASH_REALIGN_STEPS", "0") or "0"))
+        self._realign_soft_steps = int(float(os.environ.get("BDASH_REALIGN_STEPS", "0") or "0"))
         self._realign_applied = False
         self._grip_stiff_orig = None
         self._realign_fids = None
@@ -175,7 +175,7 @@ class InsertionController:
         self.m7_released = torch.zeros(n, dtype=torch.bool, device=dev)  # recover mode: hold dropped at PRESS
         # §2.1-honest tip correction (m, world): added to the proprioceptive tip_estimate so the
         # controller servos the TRUE tip. Zero by default; filled by the tactile CALIBRATE probe
-        # (Phase 2) or overwritten each step by the VDASH_CHEAT_TIP oracle. See precision-budget plan.
+        # (Phase 2) or overwritten each step by the BDASH_CHEAT_TIP oracle. See precision-budget plan.
         self.tip_correction = torch.zeros(n, 3, device=dev)
         self._frozen_noise = torch.zeros(n, 3, device=dev)  # per-episode estimator error (m), frozen once
         self._noise_set = torch.zeros(n, dtype=torch.bool, device=dev)
@@ -243,7 +243,7 @@ class InsertionController:
         beta = self._decant_sign * (dz / max(self._decant_gain, 1e-6)) * (3.141592653589793 / 180.0)  # rad
         ax = torch.zeros(q_down.shape[0], 3, device=q_down.device)
         ax[:, 0] = 1.0  # de-cant about x (the finger-observable axis)
-        if os.environ.get("VDASH_CAL_DIAG"):
+        if os.environ.get("BDASH_CAL_DIAG"):
             print(f"[decant] dz={float(dz[0]):.2f}N beta_est={float(beta[0]) * 180 / 3.14159:.1f}deg", flush=True)
         return quat_mul(quat_from_angle_axis(beta, ax), q_down)
 
@@ -265,7 +265,7 @@ class InsertionController:
         probe_xy = axis_xy + off
         at_xy = torch.norm(tip[:, :2] - probe_xy, dim=-1) < self._cal_xy_tol
         risen = tip[:, 2] >= (safe_z - self._cal_z_tol)
-        if os.environ.get("VDASH_CAL_DIAG") and bool(in_cal[0]):
+        if os.environ.get("BDASH_CAL_DIAG") and bool(in_cal[0]):
             self._cal_dbg = getattr(self, "_cal_dbg", 0) + 1
             if self._cal_dbg % 25 == 0:
                 print(
@@ -300,7 +300,7 @@ class InsertionController:
             corr[:, 2] = mouth_z - plateau  # e_z from the plateau
             apply = done & (wsum > 1e-9)
             self.tip_correction = torch.where(apply.unsqueeze(-1), corr, self.tip_correction)
-            if os.environ.get("VDASH_CAL_DIAG") and bool(done[0]):
+            if os.environ.get("BDASH_CAL_DIAG") and bool(done[0]):
                 print(
                     f"[caldiag] env0 e_xy=({corr[0, 0] * 1000:.1f},{corr[0, 1] * 1000:.1f})mm "
                     f"e_z={corr[0, 2] * 1000:.1f}mm wsum={float(wsum[0]):.4f} valid={(wsum[0] > 1e-9).item()}",
@@ -340,7 +340,7 @@ class InsertionController:
                     self._frozen_noise = torch.where(fresh.unsqueeze(-1), nz, self._frozen_noise)
                     self._noise_set = self._noise_set | fresh
             self.tip_correction = (true_tip - tip) + self._frozen_noise
-        # §2.1 observable tip correction from the de-cant cue (VDASH_GATE_CORRECT): a cock phi about the
+        # §2.1 observable tip correction from the de-cant cue (BDASH_GATE_CORRECT): a cock phi about the
         # finger-perp axis displaces the blind tip by ~L*sin(phi) laterally; estimate phi from the per-finger
         # force-z asymmetry (dz) and shift the assumed tip there (like the oracle, but observable). Frozen once.
         if self._gate_correct and not self._cheat_tip:

@@ -1,0 +1,51 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Gr00tDatasetConfig for the B-DASH pick->handoff **v3** dataset: 200 demos with the SQUARE-grip peg
+# + yaw-aligned grasp, so the peg's yaw is grasp-relevant and randomized (true pose diversity, not just
+# position). Recorded with --arm_init_std 0.15. Identical to bdash_pick_handoff_v2_config.yaml except
+# the source HDF5. NOTE: square-peg asset — incompatible with v1/v2 (cylinder) datasets/models.
+# Output: datasets/bdash/vla_pick_handoff_v3/lerobot
+
+data_root: "/workspaces/isaaclab_arena/datasets/bdash"
+language_instruction: "Pick up the peg and move it over the socket."
+task_index: 0
+hdf5_name: "vla_pick_handoff_v3.hdf5"
+
+state_name_sim: "joint_pos"
+action_name_sim: "processed_actions"
+pov_cam_name_sim: "wrist_cam_rgb"
+front_cam_name_sim: "left_cam_rgb"
+right_cam_name_sim: "right_cam_rgb"
+
+state_name_lerobot: "observation.state"
+action_name_lerobot: "action"
+video_name_lerobot: "observation.images.ego_view"
+front_video_name_lerobot: "observation.images.left_view"
+right_video_name_lerobot: "observation.images.right_view"
+task_description_lerobot: "annotation.human.task_description"
+
+chunks_size: 1000
+fps: 30
+
+data_path: "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet"
+video_path: "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4"
+
+modality_template_path: "isaaclab_arena_gr00t/embodiments/franka/modality.json"
+modality_fname: "modality.json"
+episodes_fname: "episodes.jsonl"
+tasks_fname: "tasks.jsonl"
+info_template_path: "isaaclab_arena_gr00t/embodiments/franka/info.json"
+info_fname: "info.json"
+
+policy_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/gr00t_9dof_joint_space.yaml"
+policy_action_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/gr00t_8dof_action_space.yaml"
+robot_type: "franka"
+
+action_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/8dof_action_space.yaml"
+state_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/9dof_joint_space.yaml"
+
+original_image_size: [256, 256, 3]
+target_image_size: [256, 256, 3]

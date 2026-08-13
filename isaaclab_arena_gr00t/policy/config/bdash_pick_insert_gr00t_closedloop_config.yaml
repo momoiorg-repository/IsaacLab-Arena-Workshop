@@ -1,0 +1,42 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers.
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# B-DASH pick->handoff closed-loop policy config for the GR00T N1.6 VLA fine-tuned on
+# datasets/bdash/vla_pick_handoff (M9). The VLA outputs 8-dof joint-position actions
+# (processed_actions space), so eval it in the `franka_joint` embodiment env:
+#   policy_runner.py --policy_type gr00t_closedloop \
+#     --policy_config_yaml_path isaaclab_arena_gr00t/policy/config/bdash_pick_insert_gr00t_closedloop_config.yaml \
+#     bdash_pick_insert --embodiment franka_joint --enable_cameras ...
+#
+# model_path: local in-process path (repo mounted at /workspaces/isaaclab_arena in the GR00T
+# container). For the remote server (run_gr00t_server.sh, models mounted at /models), use
+# /models/bdash-gr00t-n1-6-pick-handoff instead.
+model_path: /workspaces/isaaclab_arena/models/bdash-gr00t-n1-6-pick-handoff
+language_instruction: "Pick up the peg and move it over the socket."
+action_horizon: 16
+embodiment_tag: NEW_EMBODIMENT
+video_backend: decord
+modality_config_path: isaaclab_arena_gr00t/embodiments/franka/franka_modality_config.py
+
+# Joint orderings — Franka (bdash IS a panda), same as the dataset converter used.
+policy_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/gr00t_8dof_action_space.yaml
+state_policy_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/gr00t_9dof_joint_space.yaml
+action_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/8dof_action_space.yaml
+state_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/9dof_joint_space.yaml
+
+action_chunk_length: 16
+# Joint-space tabletop manipulation (action = remapped joint targets); reused for bdash.
+task_mode_name: franka_tabletop_manipulation
+
+# Three RGB streams in modality order (ego/left/right == wrist/left/right).
+pov_cam_name_sim: ["wrist_cam_rgb", "left_cam_rgb", "right_cam_rgb"]
+
+original_image_size: [256, 256, 3]
+target_image_size: [256, 256, 3]

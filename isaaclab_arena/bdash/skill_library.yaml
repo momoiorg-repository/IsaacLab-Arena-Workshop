@@ -6,18 +6,18 @@
 # B-DASH skill library.
 # Specs (tolerance / residual error / completion) are measured on the
 # peg-in-hole test bench; sources are the frozen repro CSVs:
-#   residual (VLA):     results/vdash/repro/grasp_diag_* + pg_multiseed (n=74, 5 seeds)
-#   residual (script):  results/vdash/repro/grasp_diag (scripted expert)
-#   basin B:            results/vdash/e4_*_c2.0_s*.csv
-#   clearance limits:   results/vdash/e2_clearance_final.csv + intermediate sockets
-#   gate estimator:     results/vdash/repro/budget_gate_sweep.csv
+#   residual (VLA):     results/bdash/repro/grasp_diag_* + pg_multiseed (n=74, 5 seeds)
+#   residual (script):  results/bdash/repro/grasp_diag (scripted expert)
+#   basin B:            results/bdash/e4_*_c2.0_s*.csv
+#   clearance limits:   results/bdash/e2_clearance_final.csv + intermediate sockets
+#   gate estimator:     results/bdash/repro/budget_gate_sweep.csv
 # Units: mm / deg unless stated.
 
 skills:
   vla_grasp_carry:
     type: front
     implementation: gr00t_n17_v6_closedloop
-    runner_policy: vdash_vla_v6_recovery
+    runner_policy: bdash_vla_v6_recovery
     capabilities: [grasp, carry]
     completion_condition: static_grasp_in_region
     completion_rate: 0.72            # reached switch condition (5 seeds x 20 ep)
@@ -28,7 +28,7 @@ skills:
   scripted_pick:
     type: front
     implementation: scripted_pick
-    runner_policy: vdash_scripted
+    runner_policy: bdash_scripted
     capabilities: [grasp, carry]
     completion_condition: static_grasp_in_region
     completion_rate: 0.99
@@ -54,4 +54,4 @@ skills:
     gate:
       estimator: finger_force_dz_tilt
       recovery: [tip_correction, regrasp, replan]
-      env: {VDASH_BUDGET_GATE: log, VDASH_GATE_CORRECT: "0"}
+      env: {BDASH_BUDGET_GATE: log, BDASH_GATE_CORRECT: "0"}

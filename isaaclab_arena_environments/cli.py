@@ -9,6 +9,7 @@ from typing import Any
 
 from isaaclab_arena.cli.isaaclab_arena_cli import get_isaaclab_arena_cli_parser
 from isaaclab_arena_environments.bdash_chuck_load_environment import BDashChuckLoadEnvironment
+from isaaclab_arena_environments.bdash_pick_insert_environment import BDashPickInsertEnvironment
 from isaaclab_arena_environments.cube_goal_pose_environment import CubeGoalPoseEnvironment
 from isaaclab_arena_environments.droid_pick_and_place_srl_environment import DroidPickAndPlaceSRLEnvironment
 from isaaclab_arena_environments.franka_put_and_close_door_environment import FrankaPutAndCloseDoorEnvironment
@@ -27,7 +28,6 @@ from isaaclab_arena_environments.lift_object_environment import LiftObjectEnviro
 from isaaclab_arena_environments.press_button_environment import PressButtonEnvironment
 from isaaclab_arena_environments.table_pick_and_place_environment import TablePickAndPlaceEnvironment
 from isaaclab_arena_environments.tabletop_place_upright_environment import TableTopPlaceUprightEnvironment
-from isaaclab_arena_environments.vdash_pick_insert_environment import VDashPickInsertEnvironment
 
 # NOTE(alexmillane, 2025.09.04): There is an issue with type annotation in this file.
 # We cannot annotate types which require the simulation app to be started in order to
@@ -52,7 +52,7 @@ ExampleEnvironments = {
     Gr1TurnStandMixerKnobEnvironment.name: Gr1TurnStandMixerKnobEnvironment,
     TablePickAndPlaceEnvironment.name: TablePickAndPlaceEnvironment,
     GR1TableMultiObjectNoCollisionEnvironment.name: GR1TableMultiObjectNoCollisionEnvironment,
-    VDashPickInsertEnvironment.name: VDashPickInsertEnvironment,
+    BDashPickInsertEnvironment.name: BDashPickInsertEnvironment,
     BDashChuckLoadEnvironment.name: BDashChuckLoadEnvironment,
 }
 

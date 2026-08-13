@@ -1,10 +1,10 @@
-# V-DASH 開発依頼書 v2(Claude Code / Opus 4.8 用)
+# B-DASH 開発依頼書 v2(Claude Code / Opus 4.8 用)
 
-発行日: 2026-06-12 / 前版: V-DASH_dev_brief.md(v1)。v1 と矛盾する場合は本書(v2)を正とする。
+発行日: 2026-06-12 / 前版: B-DASH_dev_brief.md(v1)。v1 と矛盾する場合は本書(v2)を正とする。
 
 ## 0. 進め方(必読)
 
-1. **Plan Mode で開始**し、まず §1 の現状を実リポジトリで検証すること(`docs/milestones/M0.md`〜`M2.md`、`vdash_M1-M3_report_ja.md`、`logs/vdash/*.jsonl` を読む)。本書の現状認識と実態がずれていたら、実態を正とし差分を報告。
+1. **Plan Mode で開始**し、まず §1 の現状を実リポジトリで検証すること(`docs/milestones/M0.md`〜`M2.md`、`bdash_M1-M3_report_ja.md`、`logs/bdash/*.jsonl` を読む)。本書の現状認識と実態がずれていたら、実態を正とし差分を報告。
 2. 計画(マイルストーン単位のファイル変更・検証方法)を提示し、承認後に実装。
 3. 推奨運用: 調査・計画 = plan + effort xhigh、実装 = acceptEdits + effort high(M3a の接触ダイナミクス調整のみ xhigh)。
 4. **M0–M2 の成果を退行させない。** 既存の述語・ログ・環境登録は変更前に必ず影響範囲を提示。
@@ -102,7 +102,7 @@ M3 残課題の解消。施策は以下の順で入れ、各施策ごとに L1/c
 | 1 | VLA 単体 | 微調整済み VLA(依頼書 v3) | 未 |
 | 2 | ルールベース単体 | M8 古典ビジョン + 嵌合 | 未 |
 | 3 | ナイーブ切替 | VLA + 固定タイミング切替 | 未(v3 後) |
-| 4 | V-DASH | VLA(当面 scripted_pick で代替)+ 述語切替 + 嵌合 | 稼働中 |
+| 4 | B-DASH | VLA(当面 scripted_pick で代替)+ 述語切替 + 嵌合 | 稼働中 |
 
 **論文プラン B(明記)**: 7/9 までに VLA 微調整が間に合わない場合、原稿は E2+E4+アーキテクチャ+scripted_pick 代替での統合結果で構成し、VLA 実装結果は 9 月の発表時に追加する。これを前提に、**E2/E4 を最優先**とする。
 

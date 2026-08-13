@@ -1,2 +1,0 @@
-policy,clearance_mm,level,n,success,success_rate,ci95_low,ci95_high,insert_force_median_N,handoff_fired,jsonl
-vdash_scripted,2.0,L1,20,1,0.05,0.0089,0.2361,11.633,19,vdash_handoff_grid_vdash_scripted_c2.0_L1_20260701_100345.jsonl

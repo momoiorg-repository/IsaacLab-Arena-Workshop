@@ -1,0 +1,2 @@
+clearance_mm,feasible,chosen_skill,predicted_success,measured_success,n,note
+2.0,True,vla_grasp_carry,0.219,0.35,20,"policy=bdash_vla_v6_recovery (best-effort: budget not met, gate-monitored)"

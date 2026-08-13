@@ -17,7 +17,7 @@ silently break a scene later:
 Usage::
 
     /isaac-sim/python.sh scripts/bdash/verify_assets.py
-    /isaac-sim/python.sh scripts/bdash/verify_assets.py --assets assets/bdash --config configs/bdash/assets.yaml
+    /isaac-sim/python.sh scripts/bdash/verify_assets.py --assets assets/bdash/chuck_load --config configs/bdash/chuck_load/assets.yaml
 """
 
 import argparse
@@ -45,8 +45,8 @@ def _check_extent(name: str, got: float, want: float, axis: str, failures: list[
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Verify B-DASH generated assets.")
-    ap.add_argument("--assets", default="assets/bdash")
-    ap.add_argument("--config", default="configs/bdash/assets.yaml")
+    ap.add_argument("--assets", default="assets/bdash/chuck_load")
+    ap.add_argument("--config", default="configs/bdash/chuck_load/assets.yaml")
     args = ap.parse_args()
 
     with open(args.config) as f:

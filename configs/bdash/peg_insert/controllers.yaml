@@ -1,0 +1,116 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# B-DASH scripted expert + rule-based insertion controller (brief §3.3). Units: meters, Newtons, rad.
+# Consumed by isaaclab_arena/controllers/{ee_control,scripted_pick,insertion_controller}.py via the
+# bdash_scripted policy. Geometry mirrors configs/bdash/peg_insert/assets.yaml (peg tip at local z=0, grip-cube
+# center at shaft_length+grip/2=0.060; socket mouth at task.yaml geometry.mouth_height).
+
+ee_control:
+  pos_gain: 8.0           # P gain on world EE position error
+  rot_gain: 4.0           # P gain on orientation error (axis-angle)
+  max_pos_step: 0.05      # m / control step (clamped by L2 norm) — lead distance for the soft arm
+  max_rot_step: 0.30      # rad / control step
+  action_scale: 0.5       # MUST match FrankaIKJointRecordingActionCfg.scale
+
+pick:
+  grip_offset: 0.060      # tip -> grip-cube center along peg axis (shaft_length + grip/2)
+  approach_height: 0.12   # hover this far above the grasp point before descending (m)
+  grasp_tol: 0.006        # position tol to count a waypoint as reached (m)
+  settle_tol: 0.02        # looser tol for tall transit waypoints (m)
+  close_steps: 15         # control steps to hold while the gripper closes
+  lift_height: 0.22       # safe transit height for the EE end-effector frame (world z, m)
+  min_grip_width: 0.006   # if gripper closes below this with no peg, grasp failed (m)
+
+handoff:
+  tip_above_mouth: 0.040  # peg-tip target height above the mouth at handoff (m); inside 20-60mm cyl
+
+insertion:
+  # §2.1-compliant controller: inputs are socket pose (known fixture) + EE proprioception
+  # (tip_estimate) + wrist-F/T model only; the peg pose is NOT used for control (M3a refactor).
+  # Brief §3 M3a measures are gated by use_settle / use_force_servo / rcc_*_gain so they can be
+  # switched on one at a time and measured separately on docs/milestones/M3.md.
+
+  # --- geometry / phase tolerances ---
+  approach_above_mouth: 0.008   # PRESS-entry tip height above the mouth (m)
+  align_xy_tol: 0.004           # tip-centering tol to leave SETTLE (m)
+  settle_z_tol: 0.004           # tip-height tol to leave SETTLE when settling (m)
+  settle_z_tol_fast: 0.006      # looser height tol when use_settle is off (m)
+  press_target_depth: 0.030     # commanded tip-depth floor (m). The peg seats and RELEASEs at
+                                # seated_depth=18mm (well above the 25mm bore bottom), so it never
+                                # reaches this floor — the deeper value just gives press range to seat
+                                # through spiral-search binding (shallower caps cost ~3/50 successes)
+  capture_depth: 0.003          # tip depth past the rim at which the bore captures the peg (m)
+  seated_depth: 0.018           # tip depth below mouth that counts as seated -> release (m)
+  release_steps: 10             # steps to hold open + retract after seating
+
+  # --- M3a-1: settle above the mouth (kills approach momentum; makes handoff fire) ---
+  use_settle: true              # M3a-1 ON
+  settle_height: 0.035          # tip dwell height above the mouth (m) — inside the §3.4 handoff
+                                # cylinder (20-60mm) so the handoff predicate fires deterministically
+  settle_speed: 0.03            # EE speed (m/s) under which the settle completes
+  settle_min_steps: 15          # minimum settle dwell (steps) — give the handoff predicate time to fire
+
+  # --- M3a-2: low-force servo (press-load Fz -> small target) ---
+  use_force_servo: true         # M3a-2 ON
+  f_target: 4.0                 # N press-load target while searching (single-digit)
+  f_target_seated: 8.0          # N allowed once captured (drive home, kept single-digit)
+  f_gain: 0.002                 # (m/s)/N : search-descent speed = f_gain*(f_target - Fz)
+  contact_speed: 0.008          # m/s cap on the search-descent speed
+  seated_speed: 0.020           # m/s drive-home speed once captured (floor-clearance cap prevents slam)
+  back_speed: 0.010             # m/s cap on backing off when over the force target
+
+  # --- baseline two-stage force band (used only when use_force_servo: false) ---
+  press_step: 0.0007            # SEARCH: tip down-increment / step (m)
+  press_force_band: 3.0         # SEARCH: keep the press light so the tip can slide during spiral (N)
+  press_step_seated: 0.0030     # CAPTURED: drive home fast once inside the bore (m/step)
+  press_force_band_seated: 15.0 # CAPTURED: firmer press once the walls constrain the peg (N)
+  back_off_force: 8.0           # N — raise the target above this while searching (jam guard)
+  back_off_step: 0.0015         # m/step the target is raised while backing off
+
+  # --- spiral search ---
+  spiral_radius_max: 0.008      # m — cap on the spiral radius (> typical residual misalignment)
+  spiral_radius_rate: 0.00006   # m/step radius growth
+  spiral_omega: 0.4             # rad/step angular rate
+  spiral_engage_force: 2.0      # N — start spiraling once the tip lightly loads the face
+
+  # --- M3a-3: RCC compliance (offset rim contact -> slip into bore; Whitney 1982) ---
+  rcc_xy_gain: 0.0              # m/N lateral compliance (xy target nudged along Fxy). Neutral at
+                                # c=2.0 (M3a-3); insufficient alone at tight clearance (rim-wedge needs a
+                                # controller enhancement, not a gain) — left OFF. Available (Whitney 1982).
+  rcc_rot_gain: 0.0             # rad/N tip rotation toward Fxy (available; unused — see above)
+  rcc_rot_max: 0.10             # rad cap on the RCC rotation
+
+  # --- M5a: hop-and-search wedge recovery (F/T based) ---
+  # An (often unobserved) off-axis handoff can wedge the peg at the funnel->bore rim. A full retract
+  # resets the spiral and recreates the SAME wedge, so first try cheap micro-hops: lift to UNLOAD the
+  # wedge + advance the spiral to a NEW xy, staying in PRESS. Escalate to a full retract only after
+  # hop_max fruitless hops. Closes the c=2.0 L2/L3 off-axis-handoff failures (~3.6mm handoff error).
+  use_hop_search: false         # M5a: OFF for c=2.0 — the c=2.0 failures are geometric marginality
+                                # (systematic ~2mm handoff bias at the 2mm clearance limit), NOT
+                                # wedges, so hops add disturbance and hurt the marginal case. Hops are
+                                # the right tool for genuine wedges (c<=1.0 cliff); keep available.
+  hop_lift_m: 0.004             # m the tip target is raised per hop to unload the rim wedge
+  hop_after: 120                # PRESS steps stuck (no depth progress) before a hop; doubles as the
+                                # inter-hop cooldown (stuck_timer reset on each hop). MUST exceed the
+                                # spiral sweep time (~130 steps to grow to spiral_radius_max) so a
+                                # normal search is NOT pre-empted — matches the proven retry_after_steps
+                                # that held L0 at 100%; only a genuine wedge (spiral already failed) hops.
+  hop_max: 5                    # consecutive fruitless hops before escalating to a full retract
+  hop_spiral_step: 0.0015       # m the spiral radius is bumped per hop (explore a new xy on re-press)
+  hop_az_step: 2.39996          # rad the spiral azimuth jumps per hop (~137.5 deg golden angle so
+                                # successive hops fan out around the mouth instead of repeating)
+
+  # --- jam / retry (F/T based, replaces the old peg-tilt trigger) ---
+  jam_force: 12.0               # N lateral binding (pre-capture); retry guard when use_hop_search is
+                                # off (with hops on, recovery is driven by the stuck timer)
+  retry_after_steps: 120        # PRESS steps without depth progress -> retract to SETTLE and retry
+                                # (only used when use_hop_search is off)
+  max_retries: 6                # max full-retract re-attempts before giving up (-> insertion_failed)
+
+  # --- misc ---
+  fine_max_pos_step: 0.003      # EE clamp during settle/press — gentle, avoids ramming the rim (m/step)
+  ft_noise_std: 0.0             # optional gaussian noise added to the measured F/T wrench (N)
+  timeout_s: 8.0                # insertion-phase wall-clock budget (insertion_failed)

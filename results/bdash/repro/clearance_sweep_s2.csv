@@ -1,0 +1,8 @@
+policy,clearance_mm,level,n,success,success_rate,ci95_low,ci95_high,insert_force_median_N,handoff_fired,jsonl
+bdash_scripted,2.0,L1,20,20,1.0,0.8389,1.0,9.407,20,bdash_handoff_grid_bdash_scripted_c2.0_L1_20260628_111615.jsonl
+bdash_scripted,1.75,L1,20,20,1.0,0.8389,1.0,11.041,20,bdash_handoff_grid_bdash_scripted_c1.75_L1_20260628_111723.jsonl
+bdash_scripted,1.5,L1,20,13,0.65,0.4329,0.8188,12.296,20,bdash_handoff_grid_bdash_scripted_c1.5_L1_20260628_111843.jsonl
+bdash_scripted,1.25,L1,20,0,0.0,0.0,0.1611,19.802,20,bdash_handoff_grid_bdash_scripted_c1.25_L1_20260628_112006.jsonl
+bdash_scripted,1.0,L1,20,0,0.0,0.0,0.1611,13.764,20,bdash_handoff_grid_bdash_scripted_c1.0_L1_20260628_112131.jsonl
+bdash_scripted,0.5,L1,20,0,0.0,0.0,0.1611,13.41,20,bdash_handoff_grid_bdash_scripted_c0.5_L1_20260628_112254.jsonl
+bdash_scripted,0.25,L1,20,0,0.0,0.0,0.1611,14.54,20,bdash_handoff_grid_bdash_scripted_c0.25_L1_20260628_112418.jsonl

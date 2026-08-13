@@ -43,7 +43,7 @@ def run_cell(
         row.update(measured_success="-", n=0, note="rejected by contract check")
         return row
 
-    out_csv = f"results/vdash/bdash_demo_c{clearance}.csv"
+    out_csv = f"results/bdash/bdash_demo_c{clearance}.csv"
     run = executor.build_run(plan, episodes, seed, out_csv)
     env = dict(os.environ, **run["env"])
     env.pop("DISPLAY", None)
@@ -64,7 +64,7 @@ def main() -> None:
     ap.add_argument("--episodes", type=int, default=20)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--task", default="insert the peg into the socket")
-    ap.add_argument("--out", default="results/vdash/bdash_demo_table.csv")
+    ap.add_argument("--out", default="results/bdash/bdash_demo_table.csv")
     ap.add_argument("--vlm", action="store_true")
     ap.add_argument("--exclude", nargs="*", default=None)
     ap.add_argument("--best-effort", action="store_true")

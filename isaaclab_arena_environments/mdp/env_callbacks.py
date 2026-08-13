@@ -71,13 +71,13 @@ def assembly_env_cfg_callback(env_cfg: IsaacLabArenaManagerBasedRLEnvCfg) -> Isa
     return env_cfg
 
 
-def vdash_assembly_env_cfg_callback(env_cfg: IsaacLabArenaManagerBasedRLEnvCfg) -> IsaacLabArenaManagerBasedRLEnvCfg:
-    """V-DASH assembly physics, ported from Isaac Lab FORGE/Factory PegInsert (see
+def bdash_assembly_env_cfg_callback(env_cfg: IsaacLabArenaManagerBasedRLEnvCfg) -> IsaacLabArenaManagerBasedRLEnvCfg:
+    """B-DASH assembly physics, ported from Isaac Lab FORGE/Factory PegInsert (see
     ``docs/physics_params.md``).
 
     FORGE-grade contact-rich settings: 120 Hz physics, TGS solver with 192 position
     iterations, tight contact/rest offsets and friction. This is the source-of-truth physics
-    for the V-DASH peg-insertion task (the generic ``assembly_env_cfg_callback`` runs at 60 Hz
+    for the B-DASH peg-insertion task (the generic ``assembly_env_cfg_callback`` runs at 60 Hz
     with fewer iterations and is not robust for tight clearances).
 
     Args:

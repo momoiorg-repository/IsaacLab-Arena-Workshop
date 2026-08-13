@@ -1,0 +1,39 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers.
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# B-DASH pick->handoff closed-loop policy config for the GR00T **N1.7** VLA — same v4 dataset, but the
+# **v5-vision** run that **unfroze the vision encoder** (TUNE_VISUAL=true, 15000 steps; pushed to
+# umegan/vdash-gr00t-n1-7-pick-handoff-v5-vision on 2026-06-25). Motivated by the diagnostic finding
+# that the v4 0% was a peg-localization (vision) failure, not action timing — the gripper closed
+# 12-14cm from the peg, regressing to the spawn-distribution mean. Only model_path differs from v4, so
+# the v5 eval runs/aggregates separately (run tag grid_bdash_vla_v5_vision). Requires the gn17
+# container (isaaclab_arena-cuda_gr00t_gn17).
+model_path: /workspaces/isaaclab_arena/models/bdash-gr00t-n1-7-pick-handoff-v5-vision
+language_instruction: "Pick up the peg and move it over the socket."
+action_horizon: 16
+embodiment_tag: NEW_EMBODIMENT
+video_backend: decord
+modality_config_path: isaaclab_arena_gr00t/embodiments/franka/franka_modality_config.py
+
+# Joint orderings — Franka (bdash IS a panda), same as the dataset converter used.
+policy_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/gr00t_8dof_action_space.yaml
+state_policy_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/gr00t_9dof_joint_space.yaml
+action_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/8dof_action_space.yaml
+state_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/9dof_joint_space.yaml
+
+action_chunk_length: 16
+# Joint-space tabletop manipulation (action = remapped joint targets); reused for bdash.
+task_mode_name: franka_tabletop_manipulation
+
+# Three RGB streams in modality order (ego/left/right == wrist/left/right).
+pov_cam_name_sim: ["wrist_cam_rgb", "left_cam_rgb", "right_cam_rgb"]
+
+original_image_size: [256, 256, 3]
+target_image_size: [256, 256, 3]
