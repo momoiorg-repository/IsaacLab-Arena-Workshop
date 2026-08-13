@@ -30,20 +30,6 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
         pick_up_object = self.asset_registry.get_asset_by_name(args_cli.object)()
         destination_container = self.asset_registry.get_asset_by_name("red_container")()
         embodiment = self.asset_registry.get_asset_by_name(args_cli.embodiment)(enable_cameras=args_cli.enable_cameras)
-
-        # Goal object
-        destination_location = ObjectReference(
-            name="destination_location",
-            prim_path="{ENV_REGEX_NS}/red_container",
-            parent_asset=destination_container,
-            object_type=ObjectType.RIGID,
-        )
-
-        if args_cli.teleop_device is not None:
-            teleop_device = self.device_registry.get_device_by_name(args_cli.teleop_device)()
-        else:
-            teleop_device = None
-
         # Set poses
         # Placing object on the white table in Galileo room
         pick_up_object.set_initial_pose(
@@ -60,6 +46,19 @@ class TablePickAndPlaceEnvironment(ExampleEnvironmentBase):
                 rotation_wxyz=(1.0, 0.0, 0.0, 0.0),
             )
         )
+
+        # Goal object
+        destination_location = ObjectReference(
+            name="destination_location",
+            prim_path="{ENV_REGEX_NS}/red_container",
+            parent_asset=destination_container,
+            object_type=ObjectType.RIGID,
+        )
+
+        if args_cli.teleop_device is not None:
+            teleop_device = self.device_registry.get_device_by_name(args_cli.teleop_device)()
+        else:
+            teleop_device = None
 
         scene = Scene(assets=[background, pick_up_object, destination_container, destination_location])
 

@@ -1,3 +1,8 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers.
 # SPDX-License-Identifier: Apache-2.0
 """V-DASH parametric peg / socket asset generation (M1).
@@ -50,20 +55,22 @@ except ModuleNotFoundError:
 # Defaults (mirror configs/vdash/assets.yaml; used if yaml/file unavailable)
 # --------------------------------------------------------------------------------------
 DEFAULTS = {
-    "peg": {"shaft_diameter": 0.008, "shaft_length": 0.050, "tip_chamfer": 0.0005,
-            "grip_size": 0.020, "mass": 0.019},
-    "socket": {"outer_xy": 0.060, "height": 0.030, "bore_depth": 0.025,
-               "mouth_chamfer": 0.0005, "mass": 0.050},
+    "peg": {"shaft_diameter": 0.008, "shaft_length": 0.050, "tip_chamfer": 0.0005, "grip_size": 0.020, "mass": 0.019},
+    "socket": {"outer_xy": 0.060, "height": 0.030, "bore_depth": 0.025, "mouth_chamfer": 0.0005, "mass": 0.050},
     "clearances_mm": [2.0, 1.0, 0.5, 0.25],
-    "collision": {"contact_offset": 0.005, "rest_offset": 0.0,
-                  "socket_approximation": "sdf", "peg_approximation": "convexDecomposition"},
+    "collision": {
+        "contact_offset": 0.005,
+        "rest_offset": 0.0,
+        "socket_approximation": "sdf",
+        "peg_approximation": "convexDecomposition",
+    },
     "mesh": {"circle_sections": 96},
     "output_dir": "assets/vdash",
 }
 
 
 def load_config(path: str) -> dict:
-    cfg = {k: (v.copy() if isinstance(v, dict) else v) for k, v in DEFAULTS.items()}
+    cfg = {k: v.copy() if isinstance(v, dict) else v for k, v in DEFAULTS.items()}
     if yaml is not None and os.path.isfile(path):
         with open(path) as f:
             user = yaml.safe_load(f) or {}
@@ -91,17 +98,19 @@ def frustum(r_bottom: float, r_top: float, height: float, z0: float = 0.0, secti
     for i in range(sections):
         j = (i + 1) % sections
         faces += [[i, j, sections + j], [i, sections + j, sections + i]]  # side
-        faces.append([ib, j, i])                                          # bottom cap
-        faces.append([it, sections + i, sections + j])                    # top cap
+        faces.append([ib, j, i])  # bottom cap
+        faces.append([it, sections + i, sections + j])  # top cap
     return trimesh.Trimesh(vertices=verts, faces=np.array(faces), process=True)
 
 
 def build_peg(p: dict, sections: int) -> trimesh.Trimesh:
-    """Peg: tip chamfer frustum + shaft cylinder + cylindrical grip, tip at local z=0.
+    """Peg: tip chamfer frustum + shaft cylinder + **cylindrical grip**, tip at local z=0.
 
-    The grip is a Ø``grip`` × ``grip`` *cylinder* (not a prism): a parallel-jaw gripper grasps a
-    cylinder cleanly at any yaw, whereas a square grip gets corner contacts under the L1 yaw
-    randomization, tilting the held peg and jamming insertion. Grip-cube *center* stays at
+    The grip is a cylinder (diameter = height = ``grip_size``). A cylinder grip is **yaw-symmetric**,
+    so the grasp does not depend on the peg's yaw — the pick stays a position-only skill the VLA can
+    learn from vision. (A square grip made yaw grasp-relevant, which required the policy to perceive
+    the peg's yaw from the camera views; that was found unlearnable from 200 demos -> ~0% grasp, with
+    corr(peg_yaw, grasp_wrist) = -0.93. Reverted 2026-06-23.) Grip *center* stays at
     ``shaft_length + grip/2`` so the controller's ``grip_offset`` is unchanged."""
     r = p["shaft_diameter"] / 2.0
     ch = p["tip_chamfer"]
@@ -171,8 +180,10 @@ def to_usd(mesh: trimesh.Trimesh, out_dir: str, name: str, approximation: str, m
         make_instanceable=False,
         mass_props=schemas_cfg.MassPropertiesCfg(mass=mass),
         rigid_props=schemas_cfg.RigidBodyPropertiesCfg(
-            disable_gravity=False, max_depenetration_velocity=5.0,
-            solver_position_iteration_count=192, solver_velocity_iteration_count=1,
+            disable_gravity=False,
+            max_depenetration_velocity=5.0,
+            solver_position_iteration_count=192,
+            solver_velocity_iteration_count=1,
             max_contact_impulse=1e32,
         ),
         collision_props=schemas_cfg.CollisionPropertiesCfg(
@@ -181,8 +192,10 @@ def to_usd(mesh: trimesh.Trimesh, out_dir: str, name: str, approximation: str, m
         mesh_collision_props=_mesh_collision_cfg(approximation, int(coll.get("sdf_resolution", 256))),
     )
     conv = MeshConverter(cfg)
-    print(f"[gen] {name}: watertight={mesh.is_watertight} verts={len(mesh.vertices)} "
-          f"approx={approximation} -> {conv.usd_path}")
+    print(
+        f"[gen] {name}: watertight={mesh.is_watertight} verts={len(mesh.vertices)} "
+        f"approx={approximation} -> {conv.usd_path}"
+    )
     return conv.usd_path
 
 

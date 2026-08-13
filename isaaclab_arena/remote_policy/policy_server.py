@@ -22,6 +22,16 @@ class EndpointHandler:
 
 
 class PolicyServer:
+    """Endpoint registry + request dispatch for a server-side policy.
+
+    The endpoint table and the transport-agnostic :meth:`dispatch` helper are
+    independent of any wire transport, so alternative transports (e.g. the ROS2
+    transport in :mod:`isaaclab_arena.remote_policy.ros2_transport`) can reuse a
+    ``PolicyServer`` purely as a dispatcher by constructing one and calling
+    :meth:`dispatch` without ever calling :meth:`run` (the ZeroMQ socket is bound
+    lazily inside :meth:`run`).
+    """
+
     def __init__(
         self,
         policy: ServerSidePolicy,
@@ -31,17 +41,28 @@ class PolicyServer:
         timeout_ms: int = 15000,
     ) -> None:
         self._policy = policy
-        self._running = True
-        self._context = zmq.Context()
-        self._socket = self._context.socket(zmq.REP)
-        self._socket.setsockopt(zmq.RCVTIMEO, timeout_ms)
-        bind_addr = f"tcp://{host}:{port}"
-        print(f"[PolicyServer] binding on {bind_addr}")
-        self._socket.bind(bind_addr)
+        self._host = host
+        self._port = port
         self._api_token = api_token
+        self._timeout_ms = timeout_ms
+        self._running = True
+
+        # ZeroMQ resources are created lazily in run() so that this class can be
+        # reused as a transport-agnostic dispatcher (see class docstring).
+        self._context: zmq.Context | None = None
+        self._socket: zmq.Socket | None = None
 
         self._endpoints: dict[str, EndpointHandler] = {}
         self._register_default_endpoints()
+
+    @property
+    def running(self) -> bool:
+        """Whether the server loop should keep running (cleared by the 'kill' endpoint)."""
+        return self._running
+
+    @running.setter
+    def running(self, value: bool) -> None:
+        self._running = bool(value)
 
     def _register_default_endpoints(self) -> None:
         self.register_endpoint("ping", self._handle_ping, requires_input=False)
@@ -134,7 +155,68 @@ class PolicyServer:
             print("[PolicyServer] invalid api_token in request")
         return ok
 
+    def dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Validate, route, and execute a single decoded request.
+
+        This is the transport-agnostic core shared by the ZeroMQ loop in
+        :meth:`run` and by alternative transports. It never raises for ordinary
+        request errors; instead it returns an ``{"error": ...}`` dict so the
+        caller can simply serialize and send the result.
+
+        Args:
+            request: Decoded request dict, e.g.
+                ``{"endpoint": "get_action", "data": {...}, "api_token": "..."}``.
+                Extra keys (such as a transport-level ``request_id``) are ignored.
+
+        Returns:
+            The handler result dict, or ``{"error": <message>}`` on failure.
+        """
+        try:
+            if not isinstance(request, dict):
+                return {"error": f"Expected dict request, got {type(request)!r}"}
+
+            if not self._validate_token(request):
+                return {"error": "Unauthorized: invalid api_token"}
+
+            if "endpoint" not in request:
+                return {"error": "Missing 'endpoint' in request"}
+
+            endpoint = request["endpoint"]
+            handler = self._endpoints.get(endpoint)
+            if handler is None:
+                return {"error": f"Unknown endpoint: {endpoint}"}
+
+            print(f"[PolicyServer] dispatch endpoint='{endpoint}'")
+
+            data = request.get("data", {}) or {}
+            if not isinstance(data, dict):
+                return {"error": f"Expected dict data, got {type(data)!r}"}
+
+            if handler.requires_input:
+                result = handler.handler(**data)
+            else:
+                result = handler.handler()
+            return result
+        except Exception as exc:
+            import traceback
+
+            print(f"[PolicyServer] dispatch error: {exc}")
+            print(traceback.format_exc())
+            return {"error": str(exc)}
+
+    def _bind(self) -> None:
+        """Create and bind the ZeroMQ REP socket (called once at the start of run())."""
+        self._context = zmq.Context()
+        self._socket = self._context.socket(zmq.REP)
+        self._socket.setsockopt(zmq.RCVTIMEO, self._timeout_ms)
+        bind_addr = f"tcp://{self._host}:{self._port}"
+        print(f"[PolicyServer] binding on {bind_addr}")
+        self._socket.bind(bind_addr)
+
     def run(self) -> None:
+        if self._socket is None:
+            self._bind()
+        assert self._socket is not None
         addr = self._socket.getsockopt_string(zmq.LAST_ENDPOINT)
         print(f"[PolicyServer] listening on {addr}, api_token={self._api_token!r}")
         while self._running:
@@ -144,34 +226,14 @@ class PolicyServer:
                 request = MessageSerializer.from_bytes(raw)
 
                 if not isinstance(request, dict):
-                    raise TypeError(f"Expected dict request, got {type(request)!r}")
+                    self._socket.send(
+                        MessageSerializer.to_bytes({"error": f"Expected dict request, got {type(request)!r}"})
+                    )
+                    continue
 
                 print(f"[PolicyServer] request keys: {list(request.keys())}")
 
-                if not self._validate_token(request):
-                    self._socket.send(MessageSerializer.to_bytes({"error": "Unauthorized: invalid api_token"}))
-                    continue
-
-                endpoint = request.get("endpoint", "get_action")
-                if "endpoint" not in request:
-                    self._socket.send(MessageSerializer.to_bytes({"error": "Missing 'endpoint' in request"}))
-                    continue
-
-                endpoint = request["endpoint"]
-
-                handler = self._endpoints.get(endpoint)
-                if handler is None:
-                    raise ValueError(f"Unknown endpoint: {endpoint}")
-                print(f"[PolicyServer] dispatch endpoint='{endpoint}'")
-
-                data = request.get("data", {}) or {}
-                if not isinstance(data, dict):
-                    raise TypeError(f"Expected dict data, got {type(data)!r}")
-
-                if handler.requires_input:
-                    result = handler.handler(**data)
-                else:
-                    result = handler.handler()
+                result = self.dispatch(request)
 
                 resp_bytes = MessageSerializer.to_bytes(result)
                 print(f"[PolicyServer] sending response ({len(resp_bytes)} bytes)")
@@ -189,14 +251,18 @@ class PolicyServer:
     def close(self) -> None:
         """Stop the main loop and close ZMQ resources."""
         self._running = False
-        try:
-            self._socket.close(0)
-        except Exception as exc:
-            print(f"[PolicyServer] socket.close() error: {exc}")
-        try:
-            self._context.term()
-        except Exception as exc:
-            print(f"[PolicyServer] context.term() error: {exc}")
+        if self._socket is not None:
+            try:
+                self._socket.close(0)
+            except Exception as exc:
+                print(f"[PolicyServer] socket.close() error: {exc}")
+            self._socket = None
+        if self._context is not None:
+            try:
+                self._context.term()
+            except Exception as exc:
+                print(f"[PolicyServer] context.term() error: {exc}")
+            self._context = None
 
     @staticmethod
     def start(

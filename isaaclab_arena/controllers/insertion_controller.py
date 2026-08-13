@@ -55,7 +55,21 @@ class InsertionController:
         self.names = names
         self.mouth_height = mouth_height
         self.ee_cfg = ee_cfg
-        self.cfg = ins_cfg
+        # Tuning hook (default off): VDASH_INS_<KEY> overrides any insertion-config value, e.g.
+        # VDASH_INS_RCC_ROT_GAIN, VDASH_INS_F_TARGET, VDASH_INS_PRESS_FORCE_BAND. Used to sweep the
+        # back-end's robustness to tilted/offset grasps (tip-over reduction) without editing the yaml.
+        self.cfg = dict(ins_cfg)
+        for _k in list(self.cfg.keys()):
+            _v = os.environ.get("VDASH_INS_" + _k.upper())
+            if _v in (None, ""):
+                continue
+            _cur = self.cfg[_k]
+            if isinstance(_cur, bool):
+                self.cfg[_k] = _v.lower() in ("1", "true", "yes", "on")
+            elif isinstance(_cur, int):
+                self.cfg[_k] = int(float(_v))
+            else:
+                self.cfg[_k] = float(_v)
         self.grip_offset = grip_offset
         # DIAGNOSTIC ORACLE (default off, VIOLATES §2.1): feed the controller the peg's TRUE tip so its
         # assumed tip == true tip. This is the M11 "cheat" upper bound that proves the blind in-gripper
@@ -99,6 +113,23 @@ class InsertionController:
         # press), this corrects the tip the controller servos to, keeping the press straight.
         self._gate_correct = bool(os.environ.get("VDASH_GATE_CORRECT"))
         self._gate_L_mm = float(os.environ.get("VDASH_GATE_L_MM", "60") or "60")  # grip->tip lever (mm)
+        # §2.1 in-hand RE-ALIGN (default off): soften the finger grip (low stiffness) so a peg held at a
+        # tilt can PIVOT within the gripper while the socket mouth guides it straight — an extrinsic-
+        # dexterity / gravitational-pivoting effect. Unlike de-cant (rigid wrist rotation, which tilts the
+        # press), this lets the PEG re-orient relative to the gripper while the wrist/press stay vertical.
+        # Uses only the gripper (no peg pose), §2.1-legal.
+        self._realign = bool(os.environ.get("VDASH_REALIGN"))
+        self._grip_stiff = float(
+            os.environ.get("VDASH_GRIP_STIFF", "300") or "300"
+        )  # compliant finger stiffness when loaded
+        # soft window: soften for the first N contact steps (let the peg pivot vertical), then RE-FIRM so
+        # the spiral search runs on a straight peg and recovers the residual LATERAL offset. 0 = soft while
+        # loaded (no re-firm; fixes tilt only). >0 = re-firm after the window (aims to also cover lateral).
+        self._realign_soft_steps = int(float(os.environ.get("VDASH_REALIGN_STEPS", "0") or "0"))
+        self._realign_applied = False
+        self._grip_stiff_orig = None
+        self._realign_fids = None
+        self._realign_t = None
         self._init_phase = CALIBRATE if self._tactile_cal else SETTLE
         self.phase = None
         # M7 (E4 convergence-zone harness): hold the peg tip at a controlled lateral offset + tilt and
@@ -174,6 +205,8 @@ class InsertionController:
         self.best_depth[idx] = -1.0
         self.stuck_timer[idx] = 0
         self.hop_count[idx] = 0
+        if self._realign_t is not None:
+            self._realign_t[idx] = 0
         self.attempts[idx] = 0
         self.need_capture[idx] = True
         self.gave_up[idx] = False
@@ -378,6 +411,39 @@ class InsertionController:
         fxy = W[:, :2]
         fxy_mag = torch.norm(fxy, dim=-1)
         f_mag = torch.norm(W, dim=-1)
+
+        # §2.1 in-hand RE-ALIGN: soften the finger grip ONLY for envs whose tip is loaded against the
+        # hole rim / face (fz > thr) — there the surface supports the peg, so a compliant grip lets it
+        # PIVOT toward vertical instead of toppling; keep the grip FIRM elsewhere (free approach) so it
+        # holds. Extrinsic-dexterity re-alignment: the peg re-orients relative to the gripper; wrist stays
+        # vertical (unlike de-cant). Gripper + F/T only, no peg pose (§2.1-legal).
+        if self._realign:
+            try:
+                robot = env.unwrapped.scene["robot"]
+                if self._realign_fids is None:
+                    self._realign_fids, _ = robot.find_joints(["panda_finger.*"])
+                    self._grip_stiff_orig = float(robot.data.joint_stiffness[0, self._realign_fids[0]].item())
+                    print(
+                        f"[realign] ON: finger stiffness {self._grip_stiff_orig:.0f}; soft={self._grip_stiff:.0f} when"
+                        " loaded"
+                    )
+                in_contact = fz > c.get("realign_contact_N", 2.0)
+                if self._realign_t is None:
+                    self._realign_t = torch.zeros(fz.shape[0], dtype=torch.long, device=fz.device)
+                self._realign_t = torch.where(in_contact, self._realign_t + 1, self._realign_t)
+                # soft while loaded; if a soft window is set, RE-FIRM after N contact steps (peg straightened)
+                # so the spiral search runs on a straight, firmly-held peg and recovers the residual lateral.
+                if self._realign_soft_steps > 0:
+                    soft_now = in_contact & (self._realign_t <= self._realign_soft_steps)
+                else:
+                    soft_now = in_contact
+                soft = torch.where(soft_now, float(self._grip_stiff), float(self._grip_stiff_orig))
+                stiff = soft.unsqueeze(-1).expand(-1, len(self._realign_fids)).contiguous()
+                robot.write_joint_stiffness_to_sim(stiff, joint_ids=self._realign_fids)
+            except Exception as _e:  # noqa: BLE001
+                if not self._realign_applied:
+                    print(f"[realign] set-stiffness failed: {_e}")
+                    self._realign_applied = True
 
         # tactile CALIBRATE (§2.1-honest): run the probe sub-FSM for CALIBRATE-phase envs; it writes
         # self.tip_correction and flips CALIBRATE -> SETTLE on completion. Default off (no CALIBRATE

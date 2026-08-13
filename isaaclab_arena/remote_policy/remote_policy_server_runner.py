@@ -40,11 +40,18 @@ def build_base_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser("IsaacLab Arena Remote Policy Server")
 
-    # Generic server options.
+    # Transport selection (ZeroMQ by default; ROS2 carries the same msgpack payload).
+    parser.add_argument("--transport", type=str, default="zmq", choices=["zmq", "ros2"])
+
+    # Generic ZeroMQ server options.
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=5555)
     parser.add_argument("--api_token", type=str, default=None)
     parser.add_argument("--timeout_ms", type=int, default=5000)
+
+    # ROS2 transport options (used when --transport ros2).
+    parser.add_argument("--ros2_namespace", type=str, default="/gr00t_policy")
+    parser.add_argument("--ros2_domain_id", type=int, default=None)
 
     # Which ServerSidePolicy implementation to run.
     parser.add_argument(
@@ -101,15 +108,30 @@ def main() -> None:
     # Construct the server-side policy from CLI arguments.
     policy = policy_cls.from_args(args)  # type: ignore[call-arg]
 
-    # Start the RPC server.
-    server = PolicyServer(
-        policy=policy,
-        host=args.host,
-        port=args.port,
-        api_token=args.api_token,
-        timeout_ms=args.timeout_ms,
-    )
-    server.run()
+    # Start the RPC server over the selected transport.
+    if args.transport == "ros2":
+        from isaaclab_arena.remote_policy.ros2_transport import Ros2PolicyServer
+
+        print(
+            f"[remote_policy_server_runner] starting ROS2 server: namespace={args.ros2_namespace}, "
+            f"domain_id={args.ros2_domain_id}"
+        )
+        server = Ros2PolicyServer(
+            policy=policy,
+            namespace=args.ros2_namespace,
+            domain_id=args.ros2_domain_id,
+            api_token=args.api_token,
+        )
+        server.run()
+    else:
+        server = PolicyServer(
+            policy=policy,
+            host=args.host,
+            port=args.port,
+            api_token=args.api_token,
+            timeout_ms=args.timeout_ms,
+        )
+        server.run()
 
 
 if __name__ == "__main__":

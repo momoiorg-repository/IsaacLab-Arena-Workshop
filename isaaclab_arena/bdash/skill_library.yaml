@@ -1,0 +1,57 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# B-DASH skill library.
+# Specs (tolerance / residual error / completion) are measured on the
+# peg-in-hole test bench; sources are the frozen repro CSVs:
+#   residual (VLA):     results/vdash/repro/grasp_diag_* + pg_multiseed (n=74, 5 seeds)
+#   residual (script):  results/vdash/repro/grasp_diag (scripted expert)
+#   basin B:            results/vdash/e4_*_c2.0_s*.csv
+#   clearance limits:   results/vdash/e2_clearance_final.csv + intermediate sockets
+#   gate estimator:     results/vdash/repro/budget_gate_sweep.csv
+# Units: mm / deg unless stated.
+
+skills:
+  vla_grasp_carry:
+    type: front
+    implementation: gr00t_n17_v6_closedloop
+    runner_policy: vdash_vla_v6_recovery
+    capabilities: [grasp, carry]
+    completion_condition: static_grasp_in_region
+    completion_rate: 0.72            # reached switch condition (5 seeds x 20 ep)
+    residual_error:
+      grasp_tilt_deg:   {mean: 5.9, std: 4.8, max: 22.7}
+      grasp_lateral_mm: {mean: 7.0, std: 3.9, max: 25.0}
+
+  scripted_pick:
+    type: front
+    implementation: scripted_pick
+    runner_policy: vdash_scripted
+    capabilities: [grasp, carry]
+    completion_condition: static_grasp_in_region
+    completion_rate: 0.99
+    residual_error:
+      grasp_tilt_deg:   {mean: 0.35, std: 0.15, max: 0.6}
+      grasp_lateral_mm: {mean: 0.75, std: 0.05, max: 0.8}
+
+  rule_insert:
+    type: back
+    implementation: insertion_controller
+    capabilities: [precision_insert]
+    completion_condition: insertion_depth_ge_15mm
+    tolerance:
+      observable:                    # basin B: corrected in closed loop
+        handoff_lateral_mm: 5.0
+        handoff_tilt_deg: 8.0
+      blind:                         # gate budget on effective tip error
+        effective_tip_mm: 5.0
+        tip_lever_arm_mm: 60.0       # e = lateral + L * sin(tilt)
+      environment:
+        clearance_ok_mm: 1.75        # >=: 99-100 %
+        clearance_min_mm: 1.5        # 75 % at 1.5, 0 % at <=1.25
+    gate:
+      estimator: finger_force_dz_tilt
+      recovery: [tip_correction, regrasp, replan]
+      env: {VDASH_BUDGET_GATE: log, VDASH_GATE_CORRECT: "0"}

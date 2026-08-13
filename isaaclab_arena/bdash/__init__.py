@@ -2,6 +2,3 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
-
-from .crx5ia import crx5ia_modality_config
-from .franka import franka_modality_config

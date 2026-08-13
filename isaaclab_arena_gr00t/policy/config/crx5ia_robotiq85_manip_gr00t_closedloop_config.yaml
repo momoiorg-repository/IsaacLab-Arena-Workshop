@@ -1,0 +1,25 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# CRX5iA + Robotiq 85 tabletop manipulation closed-loop policy config
+model_path: /models/crx5ia-robotiq85-gr00tn1-6-checkpoints
+language_instruction: "Pick up the cube and place it on the container."
+action_horizon: 16
+embodiment_tag: NEW_EMBODIMENT
+video_backend: decord
+modality_config_path: isaaclab_arena_gr00t/embodiments/crx5ia/crx5ia_modality_config.py
+
+policy_joints_config_path: isaaclab_arena_gr00t/embodiments/crx5ia/gr00t_robotiq85_7dof_action_space.yaml
+state_policy_joints_config_path: isaaclab_arena_gr00t/embodiments/crx5ia/gr00t_robotiq85_7dof_joint_space.yaml
+action_joints_config_path: isaaclab_arena_gr00t/embodiments/crx5ia/robotiq85_7dof_action_space.yaml
+state_joints_config_path: isaaclab_arena_gr00t/embodiments/crx5ia/robotiq85_7dof_joint_space.yaml
+
+action_chunk_length: 16
+task_mode_name: crx5ia_tabletop_manipulation
+
+pov_cam_name_sim: ["wrist_cam_rgb", "left_cam_rgb", "right_cam_rgb"]
+
+original_image_size: [256, 256, 3]
+target_image_size: [256, 256, 3]

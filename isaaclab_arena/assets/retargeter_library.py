@@ -207,3 +207,31 @@ class G1WbcPinkMotionControllersRetargeter(RetargetterBase):
             G1LowerBodyStandingMotionControllerRetargeterCfg(sim_device=sim_device),
             DummyTorsoRetargeterCfg(sim_device=sim_device),
         ]
+
+
+@register_retargeter
+class CRX5iAKeyboardRetargeter(RetargetterBase):
+    device = "keyboard"
+    embodiment = "crx5ia"
+
+    def __init__(self):
+        pass
+
+    def get_retargeter_cfg(
+        self, crx5ia_embodiment, sim_device: str, enable_visualization: bool = False
+    ) -> RetargeterCfg | None:
+        return None
+
+
+@register_retargeter
+class CRX5iARobotiq85KeyboardRetargeter(RetargetterBase):
+    device = "keyboard"
+    embodiment = "crx5ia_robotiq85"
+
+    def __init__(self):
+        pass
+
+    def get_retargeter_cfg(
+        self, embodiment, sim_device: str, enable_visualization: bool = False
+    ) -> RetargeterCfg | None:
+        return None

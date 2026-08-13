@@ -1,0 +1,44 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers.
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# V-DASH FULL pick->insert closed-loop config for the GR00T N1.6 VLA fine-tuned end-to-end on
+# datasets/vdash/vla_pick_insert_full (VLA does the WHOLE task incl. insertion — NOT the hierarchy).
+# Run it with the plain Gr00tClosedloopPolicy (end-to-end), in the `franka_joint` env:
+#   policy_runner.py \
+#     --policy_type isaaclab_arena_gr00t.policy.gr00t_closedloop_policy.Gr00tClosedloopPolicy \
+#     --policy_config_yaml_path isaaclab_arena_gr00t/policy/config/vdash_pick_insert_full_gr00t_closedloop_config.yaml \
+#     --enable_cameras --num_envs 1 vdash_pick_insert --embodiment franka_joint ...
+# (Do NOT run this model through vdash_vla — that switcher hands off to the rule controller at handoff
+#  and would cut off the VLA's own insertion.)
+#
+# model_path: local in-process path (repo mounted at /workspaces/isaaclab_arena in the GR00T container).
+model_path: /workspaces/isaaclab_arena/models/vdash-gr00t-n1-6-pick-insert-full
+# Matches annotation.human.task_description the full-task dataset was converted with.
+language_instruction: "Pick up the peg and insert it into the socket."
+action_horizon: 16
+embodiment_tag: NEW_EMBODIMENT
+video_backend: decord
+modality_config_path: isaaclab_arena_gr00t/embodiments/franka/franka_modality_config.py
+
+# Joint orderings — Franka (vdash IS a panda), same as the dataset converter used.
+policy_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/gr00t_8dof_action_space.yaml
+state_policy_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/gr00t_9dof_joint_space.yaml
+action_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/8dof_action_space.yaml
+state_joints_config_path: isaaclab_arena_gr00t/embodiments/franka/9dof_joint_space.yaml
+
+action_chunk_length: 16
+# Joint-space tabletop manipulation (action = remapped joint targets); reused for vdash.
+task_mode_name: franka_tabletop_manipulation
+
+# Three RGB streams in modality order (ego/left/right == wrist/left/right).
+pov_cam_name_sim: ["wrist_cam_rgb", "left_cam_rgb", "right_cam_rgb"]
+
+original_image_size: [256, 256, 3]
+target_image_size: [256, 256, 3]

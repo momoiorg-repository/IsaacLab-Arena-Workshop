@@ -66,8 +66,7 @@ class Gr00tClosedloopPolicyConfig:
         default=None,
         metadata={
             "description": (
-                "Path to YAML for state remapping (sim→policy). "
-                "Defaults to policy_joints_config_path if unset."
+                "Path to YAML for state remapping (sim→policy). Defaults to policy_joints_config_path if unset."
             )
         },
     )
@@ -135,9 +134,9 @@ class Gr00tClosedloopPolicyConfig:
                 self.modality_config_path
             ).exists(), f"modality_config_path does not exist: {self.modality_config_path}"
         if self.state_policy_joints_config_path:
-            assert Path(self.state_policy_joints_config_path).exists(), (
-                f"state_policy_joints_config_path does not exist: {self.state_policy_joints_config_path}"
-            )
+            assert Path(
+                self.state_policy_joints_config_path
+            ).exists(), f"state_policy_joints_config_path does not exist: {self.state_policy_joints_config_path}"
 
         if isinstance(self.pov_cam_name_sim, str):
             self.pov_cam_name_sim = [self.pov_cam_name_sim]
@@ -160,5 +159,9 @@ class Gr00tClosedloopPolicyConfig:
             ), "embodiment_tag must be NEW_EMBODIMENT for Franka tabletop manipulation"
         elif self.task_mode_name == TaskMode.DROID_MANIPULATION.value:
             assert self.embodiment_tag == "OXE_DROID", "embodiment_tag must be OXE_DROID for DROID manipulation"
+        elif self.task_mode_name == TaskMode.CRX5IA_TABLETOP_MANIPULATION.value:
+            assert (
+                self.embodiment_tag == "NEW_EMBODIMENT"
+            ), "embodiment_tag must be NEW_EMBODIMENT for CRX5iA tabletop manipulation"
         else:
             raise ValueError(f"Invalid inference mode: {self.task_mode_name}")

@@ -23,7 +23,12 @@ from isaaclab_arena_gr00t.policy.gr00t_core import (
     load_gr00t_joint_configs,
     load_gr00t_policy_from_config,
 )
-from isaaclab_arena_gr00t.utils.io_utils import create_config_from_yaml, load_gr00t_modality_config_from_file, to_numpy
+from isaaclab_arena_gr00t.utils.io_utils import (
+    create_config_from_yaml,
+    load_gr00t_modality_config_from_file,
+    load_robot_joints_config_from_yaml,
+    to_numpy,
+)
 
 
 @dataclass
@@ -73,6 +78,15 @@ class Gr00tRemoteServerSidePolicy(ServerSidePolicy):
             self.robot_action_joints_config,
             self.robot_state_joints_config,
         ) = load_gr00t_joint_configs(self.policy_config)
+
+        # Separate state policy joints config (mirrors the in-process Gr00tClosedloopPolicy).
+        # Needed when state DOF != action DOF (e.g. Franka: state=9 DOF with 2 gripper fingers,
+        # action=8 DOF with 1 gripper finger). Falls back to policy_joints_config when unset
+        # (e.g. GR1), so behavior is unchanged for embodiments that don't set it.
+        state_policy_path = (
+            self.policy_config.state_policy_joints_config_path or self.policy_config.policy_joints_config_path
+        )
+        self.state_policy_joints_config = load_robot_joints_config_from_yaml(state_policy_path)
 
         # Modality config
         self.modality_configs = load_gr00t_modality_config_from_file(
@@ -166,7 +180,7 @@ class Gr00tRemoteServerSidePolicy(ServerSidePolicy):
             task_description=self._task_description,
             policy_config=self.policy_config,
             robot_state_joints_config=self.robot_state_joints_config,
-            policy_joints_config=self.policy_joints_config,
+            policy_joints_config=self.state_policy_joints_config,
             modality_configs=self.modality_configs,
         )
 

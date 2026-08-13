@@ -12,3 +12,4 @@ class TaskMode(Enum):
     GR1_TABLETOP_MANIPULATION = "gr1_tabletop_manipulation"
     FRANKA_TABLETOP_MANIPULATION = "franka_tabletop_manipulation"
     DROID_MANIPULATION = "droid_manipulation"
+    CRX5IA_TABLETOP_MANIPULATION = "crx5ia_tabletop_manipulation"

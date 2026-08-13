@@ -12,7 +12,7 @@ from typing import Any
 from isaaclab_arena.policy.policy_base import PolicyBase
 from isaaclab_arena.remote_policy.action_protocol import ActionMode, ActionProtocol
 from isaaclab_arena.remote_policy.policy_client import PolicyClient
-from isaaclab_arena.remote_policy.remote_policy_config import RemotePolicyConfig
+from isaaclab_arena.remote_policy.remote_policy_config import RemotePolicyConfig, Ros2RemotePolicyConfig
 
 
 class ClientSidePolicy(PolicyBase):
@@ -28,7 +28,12 @@ class ClientSidePolicy(PolicyBase):
       - Must implement get_action().
     """
 
-    def __init__(self, config: Any, remote_config: RemotePolicyConfig, protocol_cls: type[ActionProtocol]) -> None:
+    def __init__(
+        self,
+        config: Any,
+        remote_config: RemotePolicyConfig | Ros2RemotePolicyConfig,
+        protocol_cls: type[ActionProtocol],
+    ) -> None:
         super().__init__(config=config)
 
         if protocol_cls.MODE is None:
@@ -38,13 +43,11 @@ class ClientSidePolicy(PolicyBase):
         requested_action_mode: ActionMode = protocol_cls.MODE
 
         self._remote_config = remote_config
-        self._client = PolicyClient(config=self._remote_config)
+        self._client = self._build_client(self._remote_config)
 
         # 1) Ping server to ensure connectivity.
         if not self._client.ping():
-            raise RuntimeError(
-                f"Failed to connect to remote policy server at {self._remote_config.host}:{self._remote_config.port}."
-            )
+            raise RuntimeError(f"Failed to connect to remote policy server at {self._remote_config.description}.")
 
         # 2) Handshake: send requested_action_mode, parse response.
         init_resp = self._client.get_init_info(requested_action_mode=requested_action_mode.value)
@@ -64,6 +67,21 @@ class ClientSidePolicy(PolicyBase):
             )
 
         self._protocol: ActionProtocol = self.protocol_cls.from_dict(cfg_dict)
+
+    @staticmethod
+    def _build_client(remote_config: RemotePolicyConfig | Ros2RemotePolicyConfig):
+        """Construct the transport client matching the remote config type.
+
+        Returns an object exposing the same API as
+        :class:`isaaclab_arena.remote_policy.policy_client.PolicyClient`
+        (ZeroMQ by default, or a ROS2 client for :class:`Ros2RemotePolicyConfig`).
+        """
+        if isinstance(remote_config, Ros2RemotePolicyConfig):
+            # Lazy import so the ZeroMQ path never requires rclpy.
+            from isaaclab_arena.remote_policy.ros2_transport import Ros2PolicyClient
+
+            return Ros2PolicyClient(config=remote_config)
+        return PolicyClient(config=remote_config)
 
     # ---------------------- properties ----------------------------------
     @property
@@ -154,17 +172,35 @@ class ClientSidePolicy(PolicyBase):
             "Arguments for connecting to a remote policy server.",
         )
         group.add_argument(
+            "--remote_transport",
+            type=str,
+            default="zmq",
+            choices=["zmq", "ros2"],
+            help="Transport used to reach the remote policy server (default: zmq).",
+        )
+        group.add_argument(
             "--remote_host",
             type=str,
             default=None,
-            required=True,
-            help="Remote policy server host.",
+            help="Remote policy server host (required for --remote_transport zmq).",
         )
         group.add_argument(
             "--remote_port",
             type=int,
             default=5555,
-            help="Remote policy server port.",
+            help="Remote policy server port (zmq transport).",
+        )
+        group.add_argument(
+            "--ros2_namespace",
+            type=str,
+            default="/gr00t_policy",
+            help="ROS2 topic namespace for the policy request/reply (ros2 transport).",
+        )
+        group.add_argument(
+            "--ros2_domain_id",
+            type=int,
+            default=None,
+            help="ROS_DOMAIN_ID for the ROS2 transport (defaults to the ROS_DOMAIN_ID env var).",
         )
         group.add_argument(
             "--remote_api_token",
@@ -186,12 +222,24 @@ class ClientSidePolicy(PolicyBase):
         return parser
 
     @staticmethod
-    def build_remote_config_from_args(args: argparse.Namespace) -> RemotePolicyConfig:
-        """Construct RemotePolicyConfig from CLI arguments.
+    def build_remote_config_from_args(
+        args: argparse.Namespace,
+    ) -> RemotePolicyConfig | Ros2RemotePolicyConfig:
+        """Construct the remote-policy config matching the selected transport.
 
         Assumes add_remote_args_to_parser() has been called on the parser.
         """
+        transport = getattr(args, "remote_transport", "zmq")
+        if transport == "ros2":
+            return Ros2RemotePolicyConfig(
+                namespace=args.ros2_namespace,
+                domain_id=args.ros2_domain_id,
+                api_token=args.remote_api_token,
+                timeout_ms=args.remote_timeout_ms,
+            )
 
+        if args.remote_host is None:
+            raise ValueError("--remote_host is required when --remote_transport is 'zmq'.")
         return RemotePolicyConfig(
             host=args.remote_host,
             port=args.remote_port,
