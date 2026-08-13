@@ -101,3 +101,8 @@ core.*
 
 # ROS2
 **ros2_ws
+
+# MeshConverter run records: machine-written, only reflect the LAST asset converted,
+# and carry a python/tuple tag that check-yaml rejects. Regenerate, do not track.
+assets/bdash/config.yaml
+assets/bdash/.asset_hash
