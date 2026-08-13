@@ -1,0 +1,6 @@
+cond,k,n,realized_lat,realized_tilt,fins_N
+realign_only,1,20,6.2,7.3,13.623
+rccxy_002,4,20,6.2,7.3,14.03
+rccxy_005,4,20,6.2,7.3,11.287
+wide_spiral,2,20,6.2,7.3,14.28
+rccxy_wide,2,20,6.2,7.3,13.425

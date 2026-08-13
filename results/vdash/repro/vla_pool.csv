@@ -1,0 +1,5 @@
+arm,seed,n,success,rate,jsonl
+combo,0,20,9,0.450,vdash_handoff_grid_vdash_vla_v6_recovery_c2.0_L1_20260701_103010.jsonl
+baseline,0,20,7,0.350,vdash_handoff_grid_vdash_vla_v6_recovery_c2.0_L1_20260701_105754.jsonl
+combo,1,20,6,0.300,vdash_handoff_grid_vdash_vla_v6_recovery_c2.0_L1_20260701_113338.jsonl
+baseline,1,20,7,0.350,vdash_handoff_grid_vdash_vla_v6_recovery_c2.0_L1_20260701_120401.jsonl

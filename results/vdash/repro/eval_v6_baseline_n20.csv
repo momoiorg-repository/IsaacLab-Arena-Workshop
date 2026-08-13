@@ -1,0 +1,2 @@
+policy,clearance_mm,level,n,success,success_rate,ci95_low,ci95_high,insert_force_median_N,handoff_fired,jsonl
+vdash_vla_v6_recovery,2.0,L1,20,7,0.35,0.1812,0.5671,11.506,17,vdash_handoff_grid_vdash_vla_v6_recovery_c2.0_L1_20260701_105754.jsonl

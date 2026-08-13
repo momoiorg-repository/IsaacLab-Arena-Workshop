@@ -1,0 +1,6 @@
+cond,off_mm,off_deg,k,n,realized_lat,realized_tilt,fins_med_N
+baseline,6,6,1,20,8.2,6.0,16.333
+tipshift,6,6,0,20,8.2,6.0,14.941
+tipshift_g,6,6,0,20,8.2,6.0,11.226
+calgentle,6,6,17,20,8.2,6.0,38.746
+tipshift_g,6,4,0,20,7.6,4.2,13.246

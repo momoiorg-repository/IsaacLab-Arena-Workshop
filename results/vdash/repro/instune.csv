@@ -1,0 +1,7 @@
+cond,off_deg,k,n,realized_tilt_deg,fins_med_N
+baseline,8,1,20,7.4,15.597
+rccrot03,8,1,20,7.4,27.468
+rccrot08,8,0,20,7.4,30.032
+rccxy,8,1,20,7.4,16.908
+rccxyrot,8,1,20,7.4,36.005
+gentle,8,2,20,7.4,12.589

@@ -1,0 +1,5 @@
+cond,off_deg,grip_stiff,k,n,realized_tilt,fins_med_N
+baseline,8,orig,1,20,7.4,15.597
+realign800,8,800,5,20,7.4,14.505
+realign400,8,400,8,20,8.3,14.672
+realign200,8,200,10,20,9.3,13.317

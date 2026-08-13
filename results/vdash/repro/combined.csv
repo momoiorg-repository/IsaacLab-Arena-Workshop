@@ -1,0 +1,6 @@
+cond,off_mm,off_deg,k,n,realized_lat_mm,realized_tilt_deg,fins_med_N
+blind,6,8,0,20,10.4,8.5,15.034
+cal,6,0,20,20,6.3,0.5,41.245
+cal,0,8,19,20,6.9,7.4,35.422
+cal,6,4,20,20,7.6,4.2,38.666
+cal,6,8,8,20,10.4,8.5,36.754
