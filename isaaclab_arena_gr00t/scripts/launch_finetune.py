@@ -89,7 +89,9 @@ if __name__ == "__main__":
     config.model.use_relative_action = True
 
     config.training.start_from_checkpoint = ft_config.base_model_path
-    config.training.optim = "adamw_torch"
+    # BDASH_OPTIM env knob: adamw_torch fits frozen-vision on A40 (42.3/46GB measured);
+    # visual-tuning runs OOM with it and need adamw_bnb_8bit (vdi00035-002 field data).
+    config.training.optim = os.environ.get("BDASH_OPTIM", "adamw_torch")
     config.training.global_batch_size = ft_config.global_batch_size
     config.training.dataloader_num_workers = ft_config.dataloader_num_workers
     config.training.learning_rate = ft_config.learning_rate

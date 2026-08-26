@@ -61,7 +61,9 @@ DATALOADER_NUM_WORKERS="${DATALOADER_NUM_WORKERS:-2}"
 NUM_SHARDS_PER_EPOCH="${NUM_SHARDS_PER_EPOCH:-100000}"
 # adamw_torch fits the frozen-vision recipe in 42.3/46GB (measured, A40); TUNE_VISUAL=true
 # OOMs with it -- use OPTIM=adamw_bnb_8bit for visual-tuning runs (vdi00035-002 field data).
-OPTIM="${OPTIM:-adamw_torch}"
+# Passed as an env var (BDASH_OPTIM) because FinetuneConfig lives in the submodule and cannot
+# grow a tyro flag without touching upstream.
+export BDASH_OPTIM="${OPTIM:-adamw_torch}"
 USE_WANDB="${USE_WANDB:-false}"   # set "true" after `wandb login`
 
 # What to fine-tune (projector + diffusion head only; revisit for the N1.7 Qwen backbone).
@@ -103,7 +105,6 @@ exec /isaac-sim/python.sh isaaclab_arena_gr00t/scripts/launch_finetune.py \
   --num-gpus "$NUM_GPUS" \
   --dataloader-num-workers "$DATALOADER_NUM_WORKERS" \
   --num-shards-per-epoch "$NUM_SHARDS_PER_EPOCH" \
-  --optim "$OPTIM" \
   "$(bool_flag tune-llm "$TUNE_LLM")" \
   "$(bool_flag tune-visual "$TUNE_VISUAL")" \
   "$(bool_flag tune-projector "$TUNE_PROJECTOR")" \

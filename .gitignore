@@ -106,3 +106,4 @@ core.*
 # and carry a python/tuple tag that check-yaml rejects. Regenerate, do not track.
 assets/bdash/*/config.yaml
 assets/bdash/*/.asset_hash
+submodules/v_dash_ws/
