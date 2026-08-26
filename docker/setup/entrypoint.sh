@@ -24,12 +24,18 @@ DOCKER_RUN_GROUP_NAME="$(echo "$DOCKER_RUN_GROUP_NAME" | tr -c 'a-zA-Z0-9_-' '_'
 DOCKER_RUN_GROUP_NAME="${DOCKER_RUN_GROUP_NAME:-hostgroup}"
 groupadd --force --gid "$DOCKER_RUN_GROUP_ID" "$DOCKER_RUN_GROUP_NAME"
 
+# --create-home matters: nothing else makes /home/<user> (login.defs has no CREATE_HOME,
+# the Dockerfile creates none, and the deleted ubuntu user leaves only /home/ubuntu), so
+# the chown below died on every host whose username is not exactly "ubuntu" (measured on
+# vdi00035-001, user tutpoc1).
 useradd --no-log-init \
+        --create-home \
         --uid "$DOCKER_RUN_USER_ID" \
         --gid "$DOCKER_RUN_GROUP_NAME" \
         --groups sudo,isaac-sim \
         --shell /bin/bash \
         $DOCKER_RUN_USER_NAME
+mkdir -p /home/$DOCKER_RUN_USER_NAME   # belt & braces if the home pre-existed without the user
 chown $DOCKER_RUN_USER_NAME:$DOCKER_RUN_GROUP_NAME /home/$DOCKER_RUN_USER_NAME
 chown $DOCKER_RUN_USER_NAME:$DOCKER_RUN_GROUP_NAME $WORKDIR
 
