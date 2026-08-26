@@ -88,7 +88,11 @@ echo "  embodiment  : $EMBODIMENT_TAG"
 echo "  steps/bs/gpu: $MAX_STEPS / $GLOBAL_BATCH_SIZE (x$GRAD_ACCUM accum) / $NUM_GPUS"
 echo "  tune        : llm=$TUNE_LLM visual=$TUNE_VISUAL projector=$TUNE_PROJECTOR diffusion=$TUNE_DIFFUSION"
 
-exec /isaac-sim/python.sh isaaclab_arena_gr00t/scripts/launch_finetune.py \
+# Not exec: run the trainer, then hand the outputs back to the host. Training runs as root
+# inside the container (no matching user there), so everything under OUTPUT_DIR lands as
+# root:root with weights at mode 600 -- the host user cannot even read them, and every
+# host-side step (upload, eval copy) fails with PermissionError (measured on vdi00035-001).
+/isaac-sim/python.sh isaaclab_arena_gr00t/scripts/launch_finetune.py \
   --base-model-path "$BASE_MODEL_PATH" \
   --dataset-path "$DATASET_PATH" \
   --embodiment-tag "$EMBODIMENT_TAG" \
@@ -110,3 +114,6 @@ exec /isaac-sim/python.sh isaaclab_arena_gr00t/scripts/launch_finetune.py \
   "$(bool_flag tune-projector "$TUNE_PROJECTOR")" \
   "$(bool_flag tune-diffusion-model "$TUNE_DIFFUSION")" \
   "$(bool_flag use-wandb "$USE_WANDB")"
+STATUS=$?
+chmod -R a+rX "$OUTPUT_DIR" 2>/dev/null || true
+exit $STATUS
