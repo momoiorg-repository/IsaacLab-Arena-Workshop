@@ -1,0 +1,156 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# B-DASH chuck-loading APPEARANCE spec. Everything a VLA camera can see is here, and everything
+# here is FROZEN with the scene: a material is only ever visible through the renderer, so recording
+# and inference must share this file or the material is meaningless.
+#
+# Physics is untouched. These are visual materials only -- friction, restitution and mass live in
+# assets.yaml and physics_params.md, so every measurement taken before this file existed still
+# stands.
+#
+# WHY RANDOMISE THE WORKPIECE. Appearance randomisation is the visual counterpart of §0-3's
+# continuous dimensions, and the argument is the same one: classical vision presumes a KNOWN
+# appearance (CAD match, registered colour/texture), so a family whose appearance varies costs a
+# changeover every time. A policy trained across an appearance DISTRIBUTION does not pay it. The
+# bonus is that a pretty material chosen for a demo video is then in-distribution rather than a
+# covariate shift, so the demo's look stays free to change afterwards.
+#
+# WHAT THIS FIXES. Before this file the three variants were flat PreviewSurface colours -- W-A
+# blue, W-B orange, W-C green -- i.e. the colour WAS the family label. A policy could name the
+# family from one pixel and never look at the geometry, which makes §0-3's "continuous dimensions
+# carry the language-selection task" claim untestable. Hue is now sampled INDEPENDENTLY of family.
+units: meters
+
+# --------------------------------------------------------------------------------------
+# Workpieces: sampled per episode, per part, from these bounds.
+# --------------------------------------------------------------------------------------
+workpiece_randomization:
+  enabled: true
+
+  # NVIDIA MDL MATERIALS, not hand-tuned numbers (changed 2026-08-18 on request).
+  #
+  # Why this is better than the PreviewSurface parameters it replaces: a UsdPreviewSurface can only
+  # express a flat diffuse colour plus roughness/metallic, so "wood" was a brown with no grain and
+  # "metal" was a grey with a high metallic value. The vMaterials entries below carry real albedo,
+  # roughness and normal maps, so a wooden part actually has grain running along it and a brushed
+  # aluminium one has brush direction -- both are strong, object-attached visual cues, which is
+  # exactly what a policy needs and what a flat colour cannot provide.
+  #
+  # CHOSEN FOR VISUAL SEPARATION, 2026-08-22, after looking at the render rather than the names.
+  # The previous library was six woods and six metals, and its names were unique while its
+  # APPEARANCE was not: a tray drawing {Ash, Oak_Mountain, Pine} is three pale wood grains at the
+  # 3.4 mm/px the external cameras run at, so "pick up the oak workpiece" has no visible referent.
+  # Unique-but-indistinguishable is not good enough once the instruction names the material.
+  #
+  # Blue / red / silver / gold separate at that resolution. `{NVIDIA_NUCLEUS_DIR}` is expanded by
+  # Isaac Lab's MdlFileCfg.
+  #
+  # The DRAW is still per part per episode and still INDEPENDENT of the variant -- a given W-A is
+  # oak in some episodes and brushed aluminium in others. If the material tracked the variant it
+  # would be the old colour-as-label defect wearing a different hat.
+  mdl:
+    enabled: true
+    # NOT vMaterials_2, and the spelling is Metallic with two Ls. Verified against the asset server
+    # (HTTP 200 on every path below); the vMaterials guesses all 404'd.
+    root: "{NVIDIA_NUCLEUS_DIR}/Materials/2023_1/Automotive/Carpaint"
+    families:
+      # ONE family. The wood/metal split existed to keep a single hue box from spending its mass on
+      # the semi-saturated middle, which is a sampling concern for a CONTINUOUS distribution. These
+      # are four discrete materials chosen for how far apart they look, so there is nothing left for
+      # a family split to fix.
+      carpaint:
+        weight: 1.0
+        materials:
+          - Carpaint_Metallic_01.mdl   # blue
+          - Carpaint_Metallic_02.mdl   # red
+          - Carpaint_Metallic_04.mdl   # silver
+          - Carpaint_Metallic_06.mdl   # gold-ish
+    # HELD OUT: never drawn during training, used only to measure appearance generalisation. Same
+    # family as the training four, so the test is "a colour it has not seen" rather than "a material
+    # class it has not seen" -- the latter would confound appearance with surface behaviour.
+    held_out:
+      - Carpaint_Metallic_03.mdl
+      - Carpaint_Metallic_05.mdl
+      - Carpaint_Metallic_07.mdl
+      - Carpaint_Metallic_08.mdl
+
+  # PreviewSurface fallback, used only when `mdl.enabled` is false. Kept so the scene still has a
+  # complete appearance distribution if the asset root is ever unreachable.
+  families:
+    wood:
+      weight: 0.5
+      hue: [0.055, 0.110]
+      saturation: [0.35, 0.75]
+      value: [0.30, 0.72]
+      roughness: [0.55, 0.85]
+      metallic: [0.00, 0.05]
+    metal:
+      weight: 0.5
+      hue: [0.0, 1.0]
+      saturation: [0.00, 0.22]
+      value: [0.35, 0.85]
+      roughness: [0.40, 0.70]
+      metallic: [0.55, 1.00]
+  hue: [0.0, 1.0]
+  saturation: [0.05, 0.65]
+  value: [0.18, 0.85]
+  roughness: [0.40, 0.80]
+  metallic: [0.00, 0.50]
+  held_out:
+    - {name: black_oxide, rgb: [0.06, 0.06, 0.07], roughness: 0.75, metallic: 0.35}
+    - {name: bare_steel, rgb: [0.62, 0.63, 0.66], roughness: 0.42, metallic: 0.50}
+    - {name: dark_walnut, rgb: [0.19, 0.11, 0.06], roughness: 0.80, metallic: 0.00}
+    - {name: brass_stock, rgb: [0.72, 0.55, 0.24], roughness: 0.45, metallic: 0.45}
+
+# --------------------------------------------------------------------------------------
+# Fixtures: FIXED. These are the cell, not the parts -- a policy should be able to rely on them,
+# and randomising them would only make the tray harder to find for no transfer benefit.
+# --------------------------------------------------------------------------------------
+fixtures:
+  # Blue resin tote: the factory default, and the highest-contrast background for metal parts of
+  # any colour the sampler can draw (the workpiece value range tops out at 0.85, so a mid-value
+  # blue never collides with a part's own colour badly enough to hide it).
+  tray: {rgb: [0.12, 0.28, 0.62], roughness: 0.55, metallic: 0.00}
+  # Cast iron: dark and rough, as a chuck body actually is.
+  chuck_body: {rgb: [0.17, 0.17, 0.18], roughness: 0.85, metallic: 0.55}
+  # 生爪 in semi-gloss steel, so the jaws read as separate parts against the body.
+  chuck_jaw: {rgb: [0.55, 0.56, 0.58], roughness: 0.38, metallic: 0.90}
+  # TODO(brass locator ring): the ワークストッパ is boolean-unioned INTO the chuck body mesh
+  # (generate_chuck_assets.py build_chuck_body), so it has no prim of its own to carry a material.
+  # Splitting it out means regenerating the chuck USD and re-cooking its sdf collider, which is the
+  # collider the measured seating physics depends on. Not worth the risk in this window; the ring
+  # renders as cast iron for now.
+  # Mid-grey painted steel bench: neutral, so it neither competes with the blue tray nor washes out
+  # a dark workpiece against it.
+  workbench: {rgb: [0.42, 0.43, 0.45], roughness: 0.62, metallic: 0.10}
+  # touchoff_block: REMOVED 2026-08-22 -- the 仮置き台 is the touch-off datum now.
+  # vblock: REMOVED from the scene 2026-08-22 along with the route that would have used it.
+  # 仮置き台. Near-black matte, and the colour is load-bearing now that the INSTRUCTION names a
+  # colour. At its previous [0.52, 0.53, 0.55] with metallic 0.60 the pad was the same value and
+  # finish as a silver workpiece -- and the part is stood ON the pad, so "the silver one" would have
+  # been asked for against a silver background at the exact moment the re-grip has to find it.
+  # Dark and matte separates it from all four (blue / red / silver / gold), not just from silver.
+  reerect_pad: {rgb: [0.10, 0.11, 0.12], roughness: 0.88, metallic: 0.00}
+
+# --------------------------------------------------------------------------------------
+# Lighting and render settings. FROZEN for the same reason as the materials: a material only
+# reaches the image through these, so a mismatch between recording and inference silently undoes
+# every material choice above.
+# --------------------------------------------------------------------------------------
+lighting:
+  dome:
+    color: [0.75, 0.75, 0.75]
+    intensity: 1500.0
+
+render:
+  # Left at the Isaac Lab defaults, but RECORDED, so a future change is a visible diff rather than
+  # an unnoticed drift. `null` means "whatever the installed default is" -- pin a value here before
+  # changing anything about the render pipeline.
+  rendering_mode: null
+  antialiasing_mode: null
+  samples_per_pixel: null
+  enable_shadows: null
+  enable_reflections: null

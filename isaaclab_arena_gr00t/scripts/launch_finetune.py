@@ -1,7 +1,13 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Custom launch script properly integrated into the repo
 import os
 import sys
 from pathlib import Path
+
 import tyro
 
 # Add submodule to path so we can import from gr00t
@@ -13,10 +19,11 @@ from gr00t.configs.base_config import get_default_config
 from gr00t.configs.finetune_config import FinetuneConfig
 from gr00t.experiment.experiment import run as run_experiment
 
+
 # Make sure the user provided modality config is registered.
 def load_modality_config(modality_config_path: str):
     import importlib
-    
+
     path = Path(modality_config_path).resolve()
     if path.exists() and path.suffix == ".py":
         sys.path.append(str(path.parent))
@@ -30,29 +37,37 @@ if __name__ == "__main__":
     # Set LOGURU_LEVEL environment variable if not already set (default: INFO)
     if "LOGURU_LEVEL" not in os.environ:
         os.environ["LOGURU_LEVEL"] = "INFO"
-    
+
     # Use tyro for clean CLI
     ft_config = tyro.cli(FinetuneConfig, description="Launch finetuning for GR00T (Fixed for Franka/Memory)")
-    embodiment_tag = ft_config.embodiment_tag.value
+    # `FinetuneConfig.embodiment_tag` is a plain `str` in the current Isaac-GR00T submodule but was
+    # an `EmbodimentTag` enum in the version this launcher was written against, so the unconditional
+    # `.value` raised AttributeError on every run. Accept both rather than pinning to one: the peg
+    # pipeline's results are frozen against the older submodule and must keep working if it is ever
+    # checked back out.
+    embodiment_tag = getattr(ft_config.embodiment_tag, "value", ft_config.embodiment_tag)
+    # ...and a bare enum NAME still has to become its VALUE. The registry is keyed by the value
+    # ("new_embodiment"); the enum did that conversion implicitly via `.value`, so with a plain str
+    # the CLI's "NEW_EMBODIMENT" reached the registry verbatim and no tag matched.
+    from gr00t.data.embodiment_tags import EmbodimentTag
+
+    if isinstance(embodiment_tag, str) and embodiment_tag in EmbodimentTag.__members__:
+        embodiment_tag = EmbodimentTag[embodiment_tag].value
 
     # all rank workers should register for the modality config
     if ft_config.modality_config_path is not None:
         load_modality_config(ft_config.modality_config_path)
 
-    config = get_default_config().load_dict(
-        {
-            "data": {
-                "download_cache": False,
-                "datasets": [
-                    {
-                        "dataset_paths": [ft_config.dataset_path],
-                        "mix_ratio": 1.0,
-                        "embodiment_tag": embodiment_tag,
-                    }
-                ],
-            }
+    config = get_default_config().load_dict({
+        "data": {
+            "download_cache": False,
+            "datasets": [{
+                "dataset_paths": [ft_config.dataset_path],
+                "mix_ratio": 1.0,
+                "embodiment_tag": embodiment_tag,
+            }],
         }
-    )
+    })
     config.load_config_path = None
 
     # overwrite with finetune config supplied by the user
@@ -65,7 +80,7 @@ if __name__ == "__main__":
     config.model.color_jitter_params = ft_config.color_jitter_params
 
     # Standard settings
-    config.model.load_bf16 = False # Explicitly False as requested
+    config.model.load_bf16 = False  # Explicitly False as requested
     config.model.reproject_vision = False
     # N1.7: the model defaults to Gr00tN1d7Config (Cosmos-Reason2-2B / Qwen3-VL backbone). Do NOT set
     # the N1.6 Eagle backbone (model_name) or eagle_collator (the field no longer exists) — let the

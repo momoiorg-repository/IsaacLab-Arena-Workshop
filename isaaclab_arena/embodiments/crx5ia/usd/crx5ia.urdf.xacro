@@ -1,0 +1,21 @@
+<?xml version="1.0" ?>
+<!--
+  CRX5iA bare arm for Isaac Sim USD conversion.
+-->
+<robot name="crx5ia" xmlns:xacro="http://wiki.ros.org/xacro">
+
+  <!-- CRX5iA arm macro -->
+  <xacro:include filename="$(find fanuc_crx_description)/urdf/crx5ia_urdf_macro.xacro"/>
+
+  <!-- World link (fixed base) -->
+  <link name="world"/>
+
+  <!-- Dummy tool_center_point link at the flange (required by crx5ia macro as 'child') -->
+  <link name="tool_center_point"/>
+
+  <!-- Instantiate the CRX5iA arm -->
+  <xacro:crx5ia parent="world" child="tool_center_point">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:crx5ia>
+
+</robot>

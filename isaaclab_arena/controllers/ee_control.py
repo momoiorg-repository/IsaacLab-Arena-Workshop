@@ -1,3 +1,8 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Copyright (c) 2025-2026, The Isaac Lab Arena Project Developers.
 # SPDX-License-Identifier: Apache-2.0
 """End-effector pose → Franka relative-IK action.
@@ -17,7 +22,7 @@ from __future__ import annotations
 
 import torch
 
-from isaaclab.utils.math import axis_angle_from_quat, quat_conjugate, quat_from_angle_axis, quat_mul, quat_apply
+from isaaclab.utils.math import axis_angle_from_quat, quat_apply, quat_conjugate, quat_from_angle_axis, quat_mul
 
 
 def read_ee_pose(env) -> tuple[torch.Tensor, torch.Tensor]:
@@ -49,15 +54,61 @@ def level_to_down(q: torch.Tensor) -> torch.Tensor:
     jam. Leveling the held orientation to exactly straight-down keeps the grasped peg vertical while
     preserving yaw (the square grip cube is yaw-agnostic anyway)."""
     zloc = torch.tensor([0.0, 0.0, 1.0], device=q.device, dtype=q.dtype).expand(q.shape[0], 3)
-    z_w = quat_apply(q, zloc)                       # current approach axis in world
+    z_w = quat_apply(q, zloc)  # current approach axis in world
     tgt = torch.tensor([0.0, 0.0, -1.0], device=q.device, dtype=q.dtype).expand(q.shape[0], 3)
-    v = torch.cross(z_w, tgt, dim=-1)               # rotation axis (unnormalized)
+    v = torch.cross(z_w, tgt, dim=-1)  # rotation axis (unnormalized)
     s = torch.norm(v, dim=-1)
     c = (z_w * tgt).sum(dim=-1)
     angle = torch.atan2(s, c)
     axis = v / s.clamp(min=1e-9).unsqueeze(-1)
     dq = quat_from_angle_axis(angle, axis)
     return quat_mul(dq, q)
+
+
+def grasp_quat_from_axis(axis_w: torch.Tensor) -> torch.Tensor:
+    """EE orientation (N,4 wxyz) that grips a cylinder lying along ``axis_w`` (N,3).
+
+    The approach axis stays world **-z** (unchanged from the frozen v4/v6 grasp) and the wrist is
+    rotated so the fingers close **across** the cylinder, which is the only way a parallel-jaw
+    gripper can pick a part lying on its side.
+
+    Derivation. The v6 down-quat ``q0 = (0,1,0,0)`` is a 180 deg rotation about world x, whose EE
+    frame axes are ``x_e = +x``, ``y_e = -y``, ``z_e = -z``; the Franka closes its fingers along the
+    EE frame's local **±y** (``panda_finger_joint1`` has axis ``0 1 0`` on ``panda_hand``).
+    Pre-multiplying by a world-z rotation of ``psi`` -- pre-multiplication because
+    :func:`ee_pose_action` applies ``q_des = dq (x) q_cur`` -- gives
+    ``y_e = (sin psi, -cos psi, 0)``, which is orthogonal to ``a = (cos psi, sin psi, 0)``. Hence
+    ``q = Rz(psi) (x) q0`` with ``psi = atan2(a_y, a_x)``.
+
+    The axis sign is canonicalised into the +x half-plane first. ``+a`` and ``-a`` are the same
+    grasp, so leaving the sign free would let ``atan2`` command 180 deg wrist flips that the IK
+    cannot follow (rotation is clamped to ``max_rot_step`` per step, and panda_joint7 is limited to
+    +-2.8973 rad). Canonicalising makes ``|psi| <= pi/2`` by construction, so the wrist never has to
+    travel more than a quarter turn from its nominal.
+
+    The map is deliberately **stateless** -- it is a pure function of the observed axis, with no
+    "nearest to the current wrist" hysteresis. Hysteresis would make the recorded action depend on
+    history rather than on anything visible in the frame, which is a subtler version of the very
+    coupling that made the v3 dataset unlearnable.
+
+    One residual is irreducible: a cylinder's direction lives on RP^1 (a circle) while the wrist
+    angle lives on the line, so any lift is discontinuous somewhere. Here the cut sits at
+    ``a_x = 0``, and two near-identical scenes either side of it want opposite wrist signs. That is
+    topology, not a bug; it is measured rather than engineered away.
+
+    A vertical (or near-vertical) axis has no horizontal component and falls through to
+    ``psi = 0``, i.e. exactly the v6 down-quat -- the correct answer for an upright, yaw-symmetric
+    part.
+    """
+    ax, ay = axis_w[:, 0], axis_w[:, 1]
+    flip = (ax < 0) | ((ax == 0) & (ay < 0))
+    psi = torch.atan2(torch.where(flip, -ay, ay), torch.where(flip, -ax, ax))
+
+    z_axis = torch.zeros_like(axis_w)
+    z_axis[:, 2] = 1.0
+    q_down = torch.zeros(axis_w.shape[0], 4, device=axis_w.device, dtype=axis_w.dtype)
+    q_down[:, 1] = 1.0  # (w,x,y,z) = (0,1,0,0): approach axis points exactly world -z
+    return quat_mul(quat_from_angle_axis(psi, z_axis), q_down)
 
 
 def _clamp_norm(v: torch.Tensor, max_norm: float) -> torch.Tensor:

@@ -5,6 +5,7 @@
 
 from .action_chunking import ActionChunkingState
 from .action_chunking_client import *
+from .bdash_chuck_policy import *
 from .bdash_rule_based_policy import *
 from .bdash_scripted_policy import *
 from .replay_action_policy import *

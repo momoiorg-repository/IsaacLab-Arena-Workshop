@@ -1,0 +1,15 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+joints:
+  "J1": 0
+  "J2": 1
+  "J3": 2
+  "J4": 3
+  "J5": 4
+  "J6": 5
+  "robotiq_85_left_knuckle_joint": 6
+
+total_joints: 7

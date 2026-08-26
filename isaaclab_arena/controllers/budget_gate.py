@@ -3,67 +3,38 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-"""Precision-budget handoff gate (B-DASH RSJ): make the VLA→rule-based switch *budget-aware*.
+"""spec §5: the three-way budget gate. Route on a MEASURED error, or admit you did not measure.
 
-The naive B-DASH switch latches into the insertion back-end as soon as the §3.4 handoff predicate
-fires (``grasped ∧ tip-in-region ∧ low-speed``) — it never checks whether the back-end can actually
-succeed from the *current grasp*. This module turns the precision budget into the switching policy:
-at the handoff moment it estimates the (otherwise blind) in-gripper grasp error from **observable
-signals only** and decides go / no-go against the back-end's measured tolerance.
+This is the whole point of the architecture, so it is deliberately tiny and pure: a measured axial
+grip error ``e`` against two per-variant thresholds.
 
-§2.1 compliance: the estimate uses only the gripper's own per-finger contact forces (the de-cant cue
-``dz = f0_z - f1_z ∝ in-gripper cock``, validated ≈0.75 N/deg) and, optionally, a tactile-probe
-lateral estimate — never the peg's ground-truth pose.
+* ``|e| <= go``     -> **GO**: insert directly. The error is inside what the insertion process can
+  absorb while staying inside the QC protrusion window.
+* ``|e| <= reject`` -> **REFIX**: the grip is wrong but the PART is fine -- stand it on the 仮置き台
+  and re-grasp at the commanded station, which resets the error to process-nominal.
+* otherwise         -> **REJECT**: the measurement itself says something is off beyond what a
+  re-grasp fixes (part slipping, wrong part, probe artefact). Do not load it.
 
-Budget model: an in-gripper tilt ``φ`` displaces the (blind) tip by ``L·sin φ`` (lever L≈60 mm from
-grip to tip), so the effective tip error is ``e = l + L·sin φ``. The back-end's measured convergence
-basin tolerates ``e ≲ budget`` (≈5 mm at c=2.0; §3 basin). Gate: hand off iff ``e_est ≤ budget``.
+A probe that never made contact is REFIX, not GO: no measurement is not a good measurement, and the
+refix route re-establishes a known grip without needing one.
 
-Modes (env ``BDASH_BUDGET_GATE``): unset → off (headline path unchanged); ``log`` → evaluate + log
-the decision but still hand off (lets us score decision-vs-outcome without perturbing dynamics);
-``active`` → on a no-go, invoke the in-place de-cant correction before handing off (closed loop).
+The thresholds are per variant and are DERIVED, not chosen (§9 derived-window rule): the R(g) sweep
+measures where insertion quality actually degrades and writes them back. The config carries
+provisional values only so the plumbing can be exercised before the sweep lands.
 """
 
 from __future__ import annotations
 
-import math
-import os
 import torch
 
+GO, REFIX, REJECT = 0, 1, 2
+DECISION_NAMES = ("go", "refix", "reject")
 
-class BudgetGate:
-    """Estimate the in-gripper grasp error from observable signals and gate the handoff on the budget."""
 
-    def __init__(self):
-        mode = (os.environ.get("BDASH_BUDGET_GATE", "") or "").lower()
-        self.enabled = mode in ("log", "active", "correct", "1", "on", "true")
-        self.active = mode in ("active", "correct")
-        self.gain = float(os.environ.get("BDASH_DECANT_GAIN", "0.7") or "0.7")  # finger dz (N) per deg
-        self.L_mm = float(os.environ.get("BDASH_GATE_L_MM", "60") or "60")  # grip->tip lever (mm)
-        self.budget_mm = float(os.environ.get("BDASH_GATE_BUDGET_MM", "5") or "5")  # back-end tolerance (mm)
-
-    def _tilt_from_fingers(self, env, sensor_name: str):
-        """Observable in-gripper tilt estimate (deg) and raw dz (N) from per-finger force-z asymmetry."""
-        try:
-            fm = env.unwrapped.scene[sensor_name].data.force_matrix_w  # (N,B,M,3)
-            ff = fm.sum(dim=1)  # (N,M,3) per-finger net force
-            if ff.shape[1] < 2:
-                return None, None
-            dz = ff[:, 0, 2] - ff[:, 1, 2]  # (N,) ∝ cock about the finger-perp axis
-        except Exception:  # noqa: BLE001
-            return None, None
-        tilt_deg = dz.abs() / max(self.gain, 1e-6)
-        return tilt_deg, dz
-
-    def evaluate(self, env, sensor_name: str, lat_est_mm: torch.Tensor | None = None):
-        """Return (go_mask (N,bool), tilt_est_deg (N), e_est_mm (N), dz (N)). go = effective error in budget."""
-        n, dev = env.unwrapped.num_envs, env.unwrapped.device
-        tilt_deg, dz = self._tilt_from_fingers(env, sensor_name)
-        if tilt_deg is None:  # no finger sensor -> fail open (behave like the naive switch)
-            ones = torch.ones(n, dtype=torch.bool, device=dev)
-            z = torch.zeros(n, device=dev)
-            return ones, z, z, z
-        lat = lat_est_mm if lat_est_mm is not None else torch.zeros_like(tilt_deg)
-        e_mm = lat + self.L_mm * torch.sin(tilt_deg * (math.pi / 180.0))  # effective tip error
-        go = e_mm <= self.budget_mm
-        return go, tilt_deg, e_mm, dz
+def decide(e_hat: torch.Tensor, measured: torch.Tensor, go_below: torch.Tensor, reject_above: torch.Tensor):
+    """(N,) decisions from (N,) measured axial error [m] and per-env thresholds [m]."""
+    e = e_hat.abs()
+    out = torch.full_like(e, REFIX, dtype=torch.long)
+    out = torch.where(measured & (e <= go_below), torch.full_like(out, GO), out)
+    out = torch.where(measured & (e > reject_above), torch.full_like(out, REJECT), out)
+    return out

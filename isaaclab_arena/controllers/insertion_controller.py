@@ -51,6 +51,17 @@ def _wrench(env, sensor_name: str) -> torch.Tensor:
 
 
 class InsertionController:
+    def _read_wrench(self, env) -> torch.Tensor:
+        """The wrist-F/T reading this controller servos on, (N,3) world frame.
+
+        A seam, not a behaviour change: the body is exactly the call it replaced. It exists because
+        the peg scene has ONE sensor named by ``names["peg_sensor"]`` while the chuck scene has one
+        per workpiece and has to gather the episode's latched target -- and the peg path is frozen
+        (v4/v6 results depend on its transition table), so the chuck subclasses this instead of
+        editing the shared body.
+        """
+        return _wrench(env, self.names["peg_sensor"])
+
     def __init__(self, names: dict, mouth_height: float, ee_cfg: dict, ins_cfg: dict, grip_offset: float):
         self.names = names
         self.mouth_height = mouth_height
@@ -70,6 +81,10 @@ class InsertionController:
                 self.cfg[_k] = int(float(_v))
             else:
                 self.cfg[_k] = float(_v)
+        # float for the peg (one nominal grasp constant). The chuck grips each variant at its own
+        # axial station, so it sets an (N,) tensor here instead; `tip_estimate` assigns into
+        # `zeros_like(pos)[:, 2]` (ee_control.py:45-46), which broadcasts a per-env tensor without
+        # any change to that helper.
         self.grip_offset = grip_offset
         # DIAGNOSTIC ORACLE (default off, VIOLATES §2.1): feed the controller the peg's TRUE tip so its
         # assumed tip == true tip. This is the M11 "cheat" upper bound that proves the blind in-gripper
@@ -404,7 +419,7 @@ class InsertionController:
         self.prev_tip = torch.where(active.unsqueeze(-1), tip, self.prev_tip)
 
         # wrist-F/T model
-        W = _wrench(env, self.names["peg_sensor"])
+        W = self._read_wrench(env)
         if c.get("ft_noise_std", 0.0) > 0.0:
             W = W + torch.randn_like(W) * c["ft_noise_std"]
         fz = W[:, 2].clamp(min=0.0)  # upward press reaction
@@ -537,6 +552,21 @@ class InsertionController:
         else:
             ready = (lateral < align_xy_tol) & ((tip[:, 2] - settle_z).abs() < c.get("settle_z_tol_fast", 0.006))
         to_press = a & (phase == SETTLE) & ready
+
+        if os.environ.get("BDASH_SETTLE_TRACE") and bool((a & (phase == SETTLE))[0]):
+            # WHICH CONJUNCT IS FALSE. `ready` is an AND of four things and the phase counter says
+            # only that it is not true -- which is why W-A and W-C sit in SETTLE for the whole
+            # episode with no contact force and nothing in the log names the reason. Printed, never
+            # read back.
+            print(
+                f"[settle] t={int(self.timer[0]):4d} "
+                f"lateral={float(lateral[0]) * 1e3:6.2f}mm<{align_xy_tol * 1e3:.0f} "
+                f"dz={float(tip[0, 2] - settle_z[0]) * 1e3:+7.2f}mm<{settle_z_tol * 1e3:.0f} "
+                f"speed={float(speed[0]):.4f}<{c.get('settle_speed', 0.03)} "
+                f"tip_z={float(tip[0, 2]):.4f} settle_z={float(settle_z[0]):.4f} "
+                f"-> {'READY' if bool(ready[0]) else 'wait'}",
+                flush=True,
+            )
         # recover mode: the perturbed handoff has been delivered (peg settled at offset+tilt) — release
         # the hold so PRESS recenters on the true axis and straightens (RCC) the peg.
         if self.m7_active and self.m7_recover:

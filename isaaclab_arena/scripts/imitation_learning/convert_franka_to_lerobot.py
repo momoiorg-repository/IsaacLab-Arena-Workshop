@@ -1,19 +1,25 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
 
 import argparse
 import h5py
 import json
+import multiprocessing as mp
 import numpy as np
-import pandas as pd
 import shutil
 import subprocess
 import time
 import torch
 import torchvision
 import traceback
-import multiprocessing as mp
 from pathlib import Path
 from tqdm import tqdm
 from typing import Any
+
+import pandas as pd
+
 
 def wait_for_video_completion(video_path: str, max_wait_time: int = 60, check_interval: float = 0.5) -> bool:
     video_path = Path(video_path)
@@ -38,11 +44,23 @@ def wait_for_video_completion(video_path: str, max_wait_time: int = 60, check_in
         time.sleep(check_interval)
     return False
 
+
 def get_video_metadata(video_path: str) -> dict[str, Any] | None:
     if not wait_for_video_completion(video_path, max_wait_time=60):
         print(f"Timeout waiting for video completion: {video_path}")
         return None
-    cmd = ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=height,width,codec_name,pix_fmt,r_frame_rate", "-of", "json", video_path]
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=height,width,codec_name,pix_fmt,r_frame_rate",
+        "-of",
+        "json",
+        video_path,
+    ]
     try:
         output = subprocess.check_output(cmd).decode("utf-8")
         probe_data = json.loads(output)
@@ -68,6 +86,7 @@ def get_video_metadata(video_path: str) -> dict[str, Any] | None:
         print(f"Error getting metadata for {video_path}: {e}")
         return None
 
+
 def write_video_job(queue: mp.Queue, error_queue: mp.Queue):
     while True:
         job = queue.get()
@@ -83,20 +102,21 @@ def write_video_job(queue: mp.Queue, error_queue: mp.Queue):
             print(error_msg)
             error_queue.put(error_msg)
 
+
 def convert_franka_to_lerobot(hdf5_path: str, output_dir: str, task_name: str, fps: int = 30):
     hdf5_path = Path(hdf5_path)
     # Output directory name based on input filename
     output_dir = Path(output_dir) / f"{hdf5_path.stem}_lerobot"
     if output_dir.exists():
         shutil.rmtree(output_dir)
-    
-    lerobot_data_dir = output_dir 
+
+    lerobot_data_dir = output_dir
     lerobot_data_dir.mkdir(parents=True, exist_ok=True)
     (lerobot_data_dir / "meta").mkdir(exist_ok=True)
 
     f = h5py.File(hdf5_path, "r")
     data_grp = f["data"]
-    
+
     queue = mp.Queue(maxsize=10)
     error_queue = mp.Queue()
     workers = []
@@ -109,27 +129,27 @@ def convert_franka_to_lerobot(hdf5_path: str, output_dir: str, task_name: str, f
     total_frames = 0
     episodes_info = []
     video_paths = {}
-    
+
     # Iterate over episodes
     for ep_idx, demo_key in enumerate(tqdm(data_grp.keys())):
         demo = data_grp[demo_key]
-        
+
         # Read data
         # Check structure: defaults to obs/policy/joint_pos or similar
-        # Depending on how it was recorded. 
+        # Depending on how it was recorded.
         # Standard Isaac Lab ActionStateRecorder:
         # demo['obs']['policy']['joint_pos']
         # demo['actions']
-        
+
         try:
             # Try to locate state and action
             if "obs" in demo:
                 # Based on user feedback: obs keys are ['actions', 'datagen_info', 'eef_pos', 'eef_quat', 'gripper_pos', 'joint_pos', 'joint_vel']
                 # There is no 'policy' key.
                 if "joint_pos" in demo["obs"]:
-                     joint_pos = demo["obs"]["joint_pos"][:]
+                    joint_pos = demo["obs"]["joint_pos"][:]
                 elif "policy" in demo["obs"] and "joint_pos" in demo["obs"]["policy"]:
-                     joint_pos = demo["obs"]["policy"]["joint_pos"][:]
+                    joint_pos = demo["obs"]["policy"]["joint_pos"][:]
                 else:
                     print(f"Could not find joint_pos in {demo_key}. Obs keys: {list(demo['obs'].keys())}")
                     continue
@@ -142,14 +162,14 @@ def convert_franka_to_lerobot(hdf5_path: str, output_dir: str, task_name: str, f
             elif "action" in demo:
                 actions = demo["action"][:]
             else:
-                 print(f"Could not find actions in {demo_key}")
-                 continue
+                print(f"Could not find actions in {demo_key}")
+                continue
 
             length = len(actions)
             # Observations might be length + 1
             if len(joint_pos) > length:
                 joint_pos = joint_pos[:length]
-            
+
             # Timestamp
             timestamp = np.arange(length, dtype=np.float64) / fps
 
@@ -163,7 +183,7 @@ def convert_franka_to_lerobot(hdf5_path: str, output_dir: str, task_name: str, f
                 "index": np.arange(total_frames, total_frames + length, dtype=int),
                 "task_index": np.zeros(length, dtype=int),
             }
-            
+
             # Add rewards/done
             reward = np.zeros(length, dtype=float)
             reward[-1] = 1.0
@@ -173,7 +193,7 @@ def convert_franka_to_lerobot(hdf5_path: str, output_dir: str, task_name: str, f
             df_data["next.done"] = done
 
             df = pd.DataFrame(df_data)
-            
+
             # Save Parquet
             chunk_idx = ep_idx // 1000
             pq_path = lerobot_data_dir / f"data/chunk-{chunk_idx:03d}/episode_{ep_idx:06d}.parquet"
@@ -183,7 +203,7 @@ def convert_franka_to_lerobot(hdf5_path: str, output_dir: str, task_name: str, f
             # Save Video
             frames = None
             cam_key = None
-            
+
             # Search strategy 1: Look in obs group
             if "obs" in demo:
                 possible_keys = ["wrist_cam_rgb", "robot_pov_cam", "wrist_cam", "camera_obs"]
@@ -192,7 +212,7 @@ def convert_franka_to_lerobot(hdf5_path: str, output_dir: str, task_name: str, f
                         cam_key = k
                         frames = demo["obs"][cam_key][:]
                         break
-            
+
             # Search strategy 2: Look in root for camera_obs group
             if frames is None and "camera_obs" in demo:
                 cam_grp = demo["camera_obs"]
@@ -207,24 +227,20 @@ def convert_franka_to_lerobot(hdf5_path: str, output_dir: str, task_name: str, f
                 if frames is None and len(cam_grp.keys()) > 0:
                     cam_key = list(cam_grp.keys())[0]
                     frames = cam_grp[cam_key][:]
-            
+
             if frames is not None:
                 if len(frames) > length:
                     frames = frames[:length]
-                
+
                 vid_key = "observation.images.ego_view"
                 vid_path = lerobot_data_dir / f"videos/chunk-{chunk_idx:03d}/{vid_key}/episode_{ep_idx:06d}.mp4"
                 queue.put((vid_path, frames, fps))
-                
+
                 if vid_key not in video_paths:
                     video_paths[vid_key] = vid_path
-            
-            episodes_info.append({
-                "episode_index": ep_idx,
-                "tasks": [task_name],
-                "length": length
-            })
-            
+
+            episodes_info.append({"episode_index": ep_idx, "tasks": [task_name], "length": length})
+
             total_frames += length
 
         except Exception as e:
@@ -236,11 +252,12 @@ def convert_franka_to_lerobot(hdf5_path: str, output_dir: str, task_name: str, f
         queue.put(None)
     for w in workers:
         w.join()
-        
+
     f.close()
 
     # Write Meta
     import json
+
     # info.json
     info = {
         "robot_type": "franka",
@@ -254,9 +271,23 @@ def convert_franka_to_lerobot(hdf5_path: str, output_dir: str, task_name: str, f
         "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet",
         "video_path": "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4",
         "features": {
-            "observation.state": {"dtype": "float32", "shape": [9], "names": ["panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6", "panda_joint7", "panda_finger_joint1", "panda_finger_joint2"]},
+            "observation.state": {
+                "dtype": "float32",
+                "shape": [9],
+                "names": [
+                    "panda_joint1",
+                    "panda_joint2",
+                    "panda_joint3",
+                    "panda_joint4",
+                    "panda_joint5",
+                    "panda_joint6",
+                    "panda_joint7",
+                    "panda_finger_joint1",
+                    "panda_finger_joint2",
+                ],
+            },
             "action": {"dtype": "float32", "shape": [7], "names": ["x", "y", "z", "rx", "ry", "rz", "gripper"]},
-        }
+        },
     }
     # update features with video meta
     if video_paths:
@@ -271,11 +302,11 @@ def convert_franka_to_lerobot(hdf5_path: str, output_dir: str, task_name: str, f
 
     with open(lerobot_data_dir / "meta/info.json", "w") as f:
         json.dump(info, f, indent=4)
-        
+
     # tasks.jsonl
     with open(lerobot_data_dir / "meta/tasks.jsonl", "w") as f:
         print(json.dumps({"task_index": 0, "task": task_name}), file=f)
-        
+
     # episodes.jsonl
     with open(lerobot_data_dir / "meta/episodes.jsonl", "w") as f:
         for ep in episodes_info:
@@ -283,10 +314,11 @@ def convert_franka_to_lerobot(hdf5_path: str, output_dir: str, task_name: str, f
 
     print("Conversion complete.")
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("hdf5_file", type=str)
     parser.add_argument("--task_name", type=str, default="pick_place")
     args = parser.parse_args()
-    
+
     convert_franka_to_lerobot(args.hdf5_file, Path(args.hdf5_file).parent, args.task_name)

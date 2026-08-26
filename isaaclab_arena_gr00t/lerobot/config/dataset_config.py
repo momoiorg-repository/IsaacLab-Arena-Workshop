@@ -125,7 +125,11 @@ class Gr00tDatasetConfig:
     )
     policy_action_joints_config_path: Path = field(
         default=None,
-        metadata={"description": "Path to the YAML file specifying the joint ordering configuration for policy action space in dataset."},
+        metadata={
+            "description": (
+                "Path to the YAML file specifying the joint ordering configuration for policy action space in dataset."
+            )
+        },
     )
     # robot simulation specific parameters
     action_joints_config_path: Path = field(

@@ -1,0 +1,16 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Expected input & output joint names following listed order for groot state/action space
+joints:
+  single_arm:
+    - J1
+    - J2
+    - J3
+    - J4
+    - J5
+    - J6
+  gripper:
+    - robotiq_85_left_knuckle_joint

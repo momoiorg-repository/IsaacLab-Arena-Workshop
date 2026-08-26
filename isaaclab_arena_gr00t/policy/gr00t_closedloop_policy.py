@@ -27,7 +27,11 @@ from isaaclab_arena_gr00t.policy.gr00t_core import (
     load_gr00t_joint_configs,
     load_gr00t_policy_from_config,
 )
-from isaaclab_arena_gr00t.utils.io_utils import create_config_from_yaml, load_gr00t_modality_config_from_file, load_robot_joints_config_from_yaml
+from isaaclab_arena_gr00t.utils.io_utils import (
+    create_config_from_yaml,
+    load_gr00t_modality_config_from_file,
+    load_robot_joints_config_from_yaml,
+)
 
 
 @dataclass

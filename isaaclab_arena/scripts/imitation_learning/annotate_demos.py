@@ -171,7 +171,6 @@ class MimicRecorderManagerCfg(ActionStateRecorderManagerCfg):
     record_pre_step_camera_observations = PreStepCameraObservationsRecorderCfg()
 
 
-
 def main():
     """Add Isaac Lab Mimic annotations to the given demo dataset file."""
     global is_paused, current_action_index, marked_subtask_action_indices

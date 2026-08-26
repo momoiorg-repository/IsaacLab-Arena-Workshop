@@ -1,0 +1,323 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# B-DASH chuck-loading scripted expert + loading controller. Units: meters, Newtons, rad.
+# Consumed by isaaclab_arena/controllers/{ee_control,scripted_chuck_pick}.py via the
+# bdash_chuck_teacher policy. Geometry mirrors configs/bdash/chuck_load/assets.yaml: every
+# workpiece is built along +Z with its origin at the LEADING end, so "station" below always means
+# an axial distance measured from that end.
+#
+# Only `ee_control` and `pick` are consumed today. The rest is written to schema now so that the
+# post-GATE-1 skills drop in without another config migration.
+
+ee_control:
+  pos_gain: 8.0           # P gain on world EE position error
+  rot_gain: 4.0           # P gain on orientation error (axis-angle)
+  # 0.05 -> 0.08 (2026-08-23): the arm's cruise speed cap, 150 -> 240 cm/s commanded. Raised on
+  # request -- speed is the demonstration's selling point, and the recorded teacher IS what the
+  # policy learns to imitate, so a crawling teacher trains a crawling policy. The precision gates
+  # (approach/settle tolerances, the 0.5 mm creep bound) are untouched: this changes how fast the
+  # arm travels BETWEEN them, not how carefully it lands ON them. Revalidated by smoke before any
+  # recording; any drop in the loaded rate against the pre-change run means it went too far.
+  # A/B 2026-08-24, same seed, only this knob: cruise 0.05 gave angle med 2.48 / max 4.47 against
+  # 0.08's med 2.03 / max 5.22 -- no improvement -- while costing 112 steps of cycle time (711 vs
+  # 599). The seat-angle regression is NOT transport sway; the cruise stays at the fast value.
+  max_pos_step: 0.08      # m / control step (clamped by L2 norm)
+  max_rot_step: 0.30      # rad / control step -- a 90 deg wrist slew therefore needs >= 6 steps,
+                          # which is exactly why the approach waypoint gates on orientation too
+  action_scale: 0.5       # MUST match FrankaIKJointRecordingActionCfg.scale
+
+pick:
+  # --- where along the part to grip -------------------------------------------------------
+  # Side-lying: a fixed station from the leading end rather than the centroid. Every variant
+  # leads with the Ø25 shaft (W-A 0-90, W-B 0-60, W-C 0-72), so ONE station serves all three and
+  # the ~22 mm pad footprint spans [19, 41] mm, entirely on Ø25 with >= 19 mm of margin to the
+  # nearest step. The centroid would NOT work: W-B's is at 56.1 mm, only 3.9 mm from its Ø32
+  # step, so the pads would straddle a diameter change.
+  grip_station_side: 0.030
+  # NOTE: a +5 mm TCP lift for side-lying grasps was tried here and REVERTED. The arithmetic is
+  # real -- the TCP sits 8.9 mm above the fingertip, so commanding it onto the axis leaves only
+  # 3.6 mm of floor budget against a 6.0 mm grasp_tol -- but measured on a fixed seed it changed
+  # nothing (side-lying 9/18 with and without, 3 episodes flipping each way, i.e. noise at n=26).
+  # So fingertip-to-floor contact is NOT the dominant NO_GRASP mechanism. Do not re-add without a
+  # measurement that separates it from the noise floor (needs n >> 26).
+  grip_lift_side: 0.0
+  # Upright: grip below the top, because a part gripped near its base would stand 50-70 mm proud of
+  # the fingers and foul the hand.
+  #
+  # MEASURED pad geometry (franka_description/meshes/collision/finger.stl): the finger link is
+  # 53.9 mm long but the gripping FACE is only its tip 17.9 mm (link z 0.0360-0.0539), and the
+  # ee_frame TCP sits 8.9 mm inboard of the fingertip. So the pad STRADDLES the commanded point at
+  # +-9 mm -- it does not run up or down from it. At 0.035 the pad therefore lands on a
+  # constant-diameter section for every variant: W-A [46, 64] and W-C [36, 54] on Ø25, W-B [56, 74]
+  # spanning the Ø25/Ø32 step. The part stands 35 mm proud of the fingertip, clear of the hand.
+  #
+  # That last clause is true but thin, and the margin is worth writing down because NOTHING checks
+  # it -- spec §0-10 excludes the target from its own neighbour list
+  # (bdash_chuck_randomization._clearance_partition), so the gap between the hand's underside and
+  # the TARGET'S own top is unguarded. It is
+  #     clear_z - grip_below_top_upright = 0.0374 - 0.035 = 2.4 mm
+  # for every variant, against a `rot_tol` (below) of 0.06 rad and a hand underside reaching 100 mm
+  # from the TCP: a wrist tilt INSIDE tolerance sweeps its edge 100 * sin(0.06) = 6.0 mm vertically,
+  # 2.5x the margin. That looked like the cause of the upright failures. It is NOT: measured at
+  # 0.020 (a 17.4 mm margin) upright was 258/293 = 88.1% against 248/281 = 88.3% at 0.035,
+  # Fisher p = 1.0, and the target was still toppled at the stall in 35 of 35 failures. Reverted --
+  # the thin margin is real but it is not what is costing episodes, and 0.035 is the value whose
+  # pad placement is documented above.
+  # PER-VARIANT since 2026-08-15. A single constant cannot satisfy the load stage, because how deep
+  # a part can be inserted is fixed by where it is held: the fingers cannot enter the Ø40 bore
+  # (finger.stl reaches 26.2 mm out from its gripping face, so on a Ø25 shaft a finger spans radius
+  # 12.5-38.7 mm), so the fingertips stop at the chuck face and
+  #     reachable_depth = station - 0.0089 (fingertip below TCP) - 0.002 (face margin)
+  # with `station = length - grip_below_top_upright`. At a flat 0.035 that gave W-A 44.1 mm against
+  # a nominal 50 mm and W-C 34.1 mm against 72 mm -- both short.
+  #
+  # Three constraints fix each value: (a) station >= insert_depth + 0.0109 so the nominal depth is
+  # reachable; (b) station > length - clear_z (0.0374) so the hand body clears the part's own top,
+  # which nothing else checks (§0-10 excludes the target from its own neighbour list); (c) the pad,
+  # which straddles the commanded point at +-9 mm, lands on ONE constant diameter.
+  #
+  #   W-A  station 65 mm  reach 54.1 >= 50 ✓  hand margin 12.4 mm  pad [56,74] on Ø25
+  #   W-B  station 70 mm  reach 59.1 >= 40 ✓  hand margin  7.4 mm  pad [61,79] on Ø32 (clears the
+  #                                                                 Ø25/Ø32 step at 60, which the
+  #                                                                 old flat value straddled)
+  #   W-C  station 62 mm  reach 51.1 <  72 ✗  hand margin 19.4 mm  pad [53,71] on Ø25
+  #
+  # W-C CANNOT reach its nominal depth and no grip station fixes it: seating its Ø45 flange on the
+  # face needs station >= 82.9 mm on an 80 mm part. The flange is the seating feature, so holding
+  # the part anywhere below it puts the fingers under the chuck face. Recorded, not worked around.
+  # The hand margin improves from a uniform 2.4 mm to 7.4-19.4 mm as a side effect.
+  grip_below_top_upright:
+    W-A: 0.025
+    W-B: 0.030
+    # 0.004 (station 76 mm) is a TEST of the hold-descend route, not a settled value. Arithmetic
+    # says the fingertip clears the chuck face only for station > 80.9 mm on an 80 mm part, so
+    # flange seating while held should be impossible and this should jam ~4.9 mm short. Measuring
+    # it rather than asserting it, per the decision to confirm (i) empirically before falling back
+    # to (ii). The pad overhangs the top by 5 mm here, so the grip is on the Ø45 flange.
+    W-C: 0.004
+
+  # --- pose classification (on the observed part axis) -------------------------------------
+  # Upright and side-lying are separated by a wide dead band, so a marginal part is never forced
+  # into the wrong branch. The stepped variants rest TILTED (W-B 3.3 deg, W-C 7.9 deg), which is
+  # comfortably inside the side-lying band.
+  side_angle_deg: 60.0    # |axis.z| < cos(60 deg) -> grasp across the axis, wrist yaw follows it
+  upright_angle_deg: 30.0 # axis.z > cos(30 deg) -> grasp straight down, wrist yaw irrelevant
+
+  # --- waypoints ---------------------------------------------------------------------------
+  approach_height: 0.12   # hover above the grasp point before descending (m); ~108 mm above the
+                          # 12 mm tray rim, so all lateral motion happens clear of the tray
+  grasp_tol: 0.006        # position tol to count a waypoint as reached (m)
+  settle_tol: 0.02        # looser tol for tall transit waypoints (m)
+  rot_tol: 0.06           # orientation tol (rad) before descending -- only gates the axis-aligned
+                          # branch, so the frozen peg behaviour is untouched
+  close_steps: 20         # steps to hold while the gripper closes. The Franka gripper is BINARY
+                          # (open 0.04 / close 0.0), so there is no per-diameter width command;
+                          # Ø25 needs ~27.5 mm of travel per side, vs 15 steps for the peg's cube.
+  lift_height: 0.20       # EE world z at the end of the lift (m). Derived, not copied: an upright
+                          # W-B gripped 15 mm below its top puts its leading end at 0.115, clear of
+                          # the 0.072 success threshold (rim 0.012 + lifted.height 0.060).
+  min_grip_width: 0.018   # closing below this means the fingers found nothing (Ø25 settles ~0.025).
+                          # Consumed by ScriptedPick._stall_watchdog: an empty close routes into the
+                          # same retreat-and-retry path as a stalled phase.
+
+  # --- stall watchdog (spec §4-5) ----------------------------------------------------------
+  # to1/to2/to4/to5 gate purely on `reached` with no time bound, so a descent that cannot converge
+  # sits until the episode ends. Measured: the TCP froze to four decimals for 245 steps while the
+  # hand rested on a neighbouring part, turning every block into a whole lost episode.
+  # This is a PROGRESS watchdog (see insertion_controller.py:582-641), so a slow-but-converging
+  # approach is never interrupted -- only one that stops improving.
+  stall_eps: 0.001        # improvement in distance-to-waypoint that counts as progress (m)
+  stall_after_steps: 60   # steps without progress before retreating. Successful descents converge
+                          # in ~33 steps, so 60 is ~2x the honest worst case.
+  max_retries: 3          # retreat-and-retry budget per episode, then `gave_up` is raised
+
+# ------------------------------------------------------------------------------------------
+# Everything below is POST-GATE-1: schema and first-guess values, not yet consumed.
+# ------------------------------------------------------------------------------------------
+insertion:
+  # Loading a Ø25 shaft into a Ø40 bore leaves 7.5 mm of radial clearance, against 2.0 mm for the
+  # peg task. The lead-in is 3.75x more forgiving, so the spiral search is nearly vestigial here
+  # and the axial (protrusion) budget, not the lateral one, is expected to be the binding
+  # constraint. That inversion is the thing worth measuring in the R(g) sweep.
+  # Named for the key InsertionController reads (it calls the seating plane a "mouth", which for
+  # the chuck is the face at geometry.chuck_face_height). Renamed rather than duplicated: this
+  # block had never been consumed, so there was no second reader to keep in step.
+  approach_above_mouth: 0.020   # tip height above the chuck face at PRESS entry (m)
+  align_xy_tol: 0.004
+  settle_z_tol: 0.004
+  press_target_depth: 0.075     # commanded depth floor (m); below every per-variant seat depth
+  capture_depth: 0.005          # depth past the bore rim at which the bore captures the shaft (m)
+  release_steps: 10
+  use_settle: true
+  settle_height: 0.035
+  # 0.03 -> 0.05: the settle-speed gate was the last conjunct to go true (measured: two wasted
+  # steps at 0.0315 and 0.0366 against the 0.03 gate) and the position gates below still hold the
+  # precision. min_steps 15 -> 8 for the same reason -- the trace shows convergence by ~16 steps
+  # at the OLD approach speed, and the floor only needs to outlast the approach transient.
+  settle_speed: 0.03
+  settle_min_steps: 15
+  use_force_servo: true
+  f_target: 6.0                 # N while searching -- heavier stock than the peg
+  f_target_seated: 12.0         # N once captured
+  f_gain: 0.002
+  # SPEEDS RAISED 2026-08-23 for the recorded demos. The values below were tuned to make the
+  # insertion succeed, not to make it look like work: at 0.010 m/s the approach alone took 8-27 s and
+  # the recorded demo is mostly a stationary arm creeping. A demonstration that crawls teaches the
+  # policy to crawl, and it also spends the frame budget on nothing.
+  #
+  # Raised together and re-measured as a set, because they trade against the same thing: the force
+  # servo needs enough steps between contact and the seat to react. Any drop in the seated rate
+  # against the pre-change baseline means these went too far.
+  contact_speed: 0.010
+  seated_speed: 0.025
+  spiral_radius_max: 0.004      # << the peg's 0.008: the 7.5 mm lead-in swallows normal misalignment
+  spiral_radius_rate: 0.00006
+  spiral_omega: 0.4
+  spiral_engage_force: 2.0
+  rcc_xy_gain: 0.0
+  rcc_rot_gain: 0.0
+  rcc_rot_max: 0.10
+  use_hop_search: false
+  jam_force: 15.0
+  # 120 -> 360 (2026-08-24). The retry watchdog was tuned when PRESS covered its stroke in well
+  # under 120 steps; at the realized descent rates measured since (0.3-0.6 mm/step near the target)
+  # a legitimate approach can need ~200 steps, and firing mid-approach threw the controller back to
+  # SETTLE in an endless loop -- the W-A "stall at 34-43 mm with zero force" was this watchdog
+  # cycling, not the arm failing. Retries exist to recover a JAM (force with no progress); tripling
+  # the budget delays that recovery but cannot create one.
+  # 360 -> 240 (same day): 360 protected the legitimate ~200-step approach but starved the RETRY
+  # mechanism itself -- W-B's spiral needs a second attempt on unlucky alignments, and at 360 the
+  # episode cap allowed too few (zero-error W-B fell to 2/4, stuck before the bore mouth, while at
+  # the old 120 it never failed). 240 keeps the approach un-killed AND doubles the attempts.
+  retry_after_steps: 240
+  max_retries: 4
+  fine_max_pos_step: 0.003
+  timeout_s: 10.0
+  # TWO-STAGE FINAL APPROACH. `fine_max_pos_step` is 3 mm of commanded travel per step, so a
+  # descent that only notices the target after crossing it can be 3 mm past before anything reacts
+  # -- twice the tightest protrusion window (W-B, +-1.5 mm). Inside `creep_band` of the commanded
+  # depth the policy drives the tip straight at the target with `creep_max_pos_step` instead, which
+  # caps the overshoot at ONE step of creep travel:
+  #     worst-case overshoot = creep_max_pos_step = 0.5 mm  <<  1.5 mm
+  # The band only has to be wider than the distance one normal step covers so the creep is always
+  # entered before the target, not jumped over. `fine_max_pos_step` was raised from 3 to 6 mm on
+  # 2026-08-23 to stop the recorded demos crawling, so the band goes from 8 to 14 mm to keep the
+  # same margin -- and `creep_max_pos_step` stays at 0.5 mm, because the invariant above is a
+  # TOLERANCE bound, not a speed one: raising it to 1.5 mm would have put the worst-case overshoot
+  # exactly ON W-B's +-1.5 mm window instead of well inside it.
+  creep_band: 0.008
+  creep_max_pos_step: 0.0005
+  # NOTE: `seated_depth` (the PRESS -> RELEASE threshold) is NOT set here on purpose. It is
+  # per-variant -- task.yaml chuck_load.insert_depth_m is 50/40/72 mm for W-A/W-B/W-C -- so the
+  # policy injects it per env once the target is latched. Writing a constant here would be a second
+  # source of truth for the same number and the two would drift.
+
+jaws:
+  # Kinematic close plus a fixed joint (assets.yaml): no articulation, no URDF, and no 3-body
+  # contact-rich gripping to tune.
+  open_radius_extra: 0.010      # matches the environment's --jaw_open default
+  close_steps: 20
+  close_rate: 0.0006            # radial travel per step (m)
+
+gate:
+  # spec §5, the three-way budget gate: GO / REFIX / REJECT on the touch-off's measured axial grip
+  # error. PROVISIONAL until the R(g) sweep writes the derived values back (§9 derived-window rule:
+  # min(process capability, functional requirement)); the provisional go window is half the QC
+  # protrusion tolerance per variant -- grip error passes 1:1 into protrusion, and half leaves the
+  # other half for the insertion process itself.
+  # Provisional 4.0 flat: the probe carries a systematic press bias of ~+2.9 mm (it reads contact
+  # after ~3 stall steps of pressing), so a sub-bias threshold routed even perfect grips to the
+  # refix. The R(g) sweep records measured-ê beside injected-e; the derived thresholds come from
+  # THAT curve (§9), and the bias partially cancels in the direction that matters (a real +8 mm
+  # error reads ~-6, well past the gate; a clean grip reads ~+3, inside it).
+  go_below_mm: {W-A: 4.0, W-B: 4.0, W-C: 4.0}
+  # Beyond this the measurement itself is suspect (a slip this large risks the part not being held
+  # at all) -- and the refix's own capture margin (jaw opening vs Ø45 flange, 17.5 mm) bounds it.
+  reject_above_mm: 15.0
+
+touchoff:
+  # TOP FACE ONLY (2026-08-24). The gate routes on the AXIAL grip error, and the top-face touch is
+  # the one measurement that carries it; the two side faces measured a lateral offset nothing
+  # consumes, while tripling the probe's failure surface -- measured, the three-face pass was where
+  # an undetected contact pressed the held part 20 mm up through the fingers. Contact threshold
+  # halved (baseline reads ~0.25 N, so 1.5 N is still 6x above it) and the travel cap tightened to
+  # ~25 mm past nominal contact: a missed touch now gives up quickly, records NO measurement, and
+  # the gate routes the part to the refix -- the safe route -- instead of grinding it into the pad.
+  probe_speed: 0.005
+  contact_force: 1.5
+  faces: [top]
+  max_travel: 0.085
+  retract: 0.010
+
+vblock:
+  # The 仮置き route: a side-lying part cannot enter a vertical chuck, so it is set into the
+  # V-groove, released, and re-gripped upright.
+  #
+  # NOT CONSUMED. The groove was assumed to be what makes the re-erect safe, by holding the part
+  # while the grip station is changed. `scripts/bdash/verify_reerect.py` measures the claim instead:
+  # the part is a cantilever of at most 0.043 N.m about the grip while it turns, against 0.34 N.m of
+  # friction capacity -- an 8x margin at the worst variant -- so the turn is safe at the station the
+  # part is ALREADY held at and the intermediate set-down buys nothing. The swept disc is 100-152 mm
+  # across against an 80x60 mm block, so the turn has to happen clear of the groove either way.
+  # Kept here, unused, because the block is still in the scene; see `reerect` below for what runs.
+  place_height: 0.030
+  release_steps: 10
+  regrasp_offset: 0.020
+
+reerect:
+  # spec §4-2, the leg that actually runs. Turn the held part 90 deg in the air, stand it on the
+  # bench, let go, and pick it again -- after which it is an ordinary upright part and every leg
+  # downstream is the already-measured upright path.
+  #
+  # `turn_height` is the height the turn happens at. It must clear the swept disc: the part sweeps
+  # max(station, length - station) about the grip, which is 70 mm at the worst variant (W-B held at
+  # its 30 mm side station), so the TCP must be at least 78.9 mm up. The pick's own `lift_height`
+  # (0.200) already clears that by 2.5x and reusing it means the turn starts where the lift ended,
+  # with no extra travel.
+  turn_height: 0.200
+  # Fallback step count, used only before a turn has been planned. The real duration is DERIVED per
+  # episode from the slew and `turn_rate_deg_per_step`.
+  turn_steps: 60
+  # Angular RATE for the turn. 1.5 deg/step at 30 Hz = 45 deg/s, i.e. 2.0 s for a bare quarter turn,
+  # slower than the arm needs and deliberately so: the turn is open loop by §9, so nothing corrects
+  # the part if it shifts in the fingers, and angular acceleration is what shifts it.
+  #
+  # Expressed as a rate rather than a step count because the slew is NOT constant -- aiming the hand
+  # into the reachable band adds a spin on top of the 90 deg turn, measured at 90 deg for a grasp at
+  # psi = +90 rising to 180 deg at psi = -90. With a fixed 60 steps that doubles the angular speed
+  # for exactly the grasps that move furthest: measured, a 171 deg slew in 60 steps threw the part
+  # 0.35 m within 11 steps and the episode aborted on contact force with an empty gripper.
+  turn_rate_deg_per_step: 1.5
+  release_steps: 12
+  settle_steps: 20
+  place_gap: 0.003
+  # Gap for the REFIX place (upright part set back down to reset a measured grip error). Slightly
+  # larger than the re-erect's own gap because in P2 the place height uses the COMMANDED station
+  # while the real grip is off by the very error being fixed -- the gap absorbs it as a small drop
+  # rather than a press into the pad.
+  refix_gap: 0.004
+  # Top face of the 仮置き台 (assets.yaml reerect_pad), measured from the bench. MUST match that
+  # block's height: the part is released `place_gap` above this, so a mismatch either drops the part
+  # or drives it into the pad.
+  place_height: 0.040
+  arrive_tol: 0.015
+  travel_step: 0.040
+  lower_step: 0.010
+  # Per-phase give-up. The longest legitimate phase is the turn at 60 steps and the longest travel
+  # is ~0.5 m at 0.040 m/step, i.e. ~13 steps, so 400 is far above anything that should happen and
+  # only fires when a phase is genuinely stuck.
+  phase_budget: 400
+  # Where the hand may point, in WORLD coordinates, once the part is standing in the fingers. A BAND
+  # rather than a value: the controller aims at the nearest point of it, because any azimuth grips a
+  # cylinder equally and the only thing this freedom is worth spending on is reaching the band --
+  # spending more just lengthens the slew, which then has to be paid for in turn time.
+  #
+  # The band is measured, not chosen (scripts/bdash/probe_reerect_reach.py, 23 poses x 300 steps):
+  # 60/90/120/150 deg all converge to 0.0 mm and 0.00 deg with 0.63-0.99 rad of joint travel spare,
+  # while -180/-150/-120/-90/-60/-30/0/30 all jam a joint with 20-47 deg of orientation error left.
+  # Zero overlap. A fixed RELATIVE yaw was tried first and cannot work -- 180 deg is right at grasp
+  # psi = -90 and jams at psi = 0 -- which is what showed the azimuth is the controlled variable.
+  turn_azimuth_band_deg: [60.0, 150.0]

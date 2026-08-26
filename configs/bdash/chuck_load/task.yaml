@@ -8,8 +8,31 @@
 # Scene layout is deliberately COMPACT. The side cameras sit at y = +-0.57, ~0.97 m from the
 # workspace, and at focal 8.0 they see roughly a 0.65 m wide field. Every reachable feature must
 # fit inside that with margin or the demos are recorded blind at the edges -- which is why the
-# tray is 0.24 x 0.16 rather than a realistic 0.30 x 0.20. Verify with
+# side focal is dropped to 6.0 below (~0.87 m field). Verify with
 # scripts/bdash/render_cam_check.py before recording; camera settings bake into the dataset.
+#
+# Geometry is NEVER restated here: the tray is 0.300 x 0.200 x 0.030 with 5 mm wall and floor,
+# and every dimension used below is derived from configs/bdash/chuck_load/assets.yaml at load
+# time. That is what keeps the scene from drifting away from the generated meshes.
+
+# Scene entities the task and its predicates address by name. The six workpieces and their
+# per-workpiece contact sensors are named per build (they depend on --variants), so the task
+# injects those into a deepcopy of this dict rather than restating them here.
+scene_names:
+  robot: robot
+  tray: bdash_tray
+  chuck: bdash_chuck_body
+  workpiece_finger_sensor_prefix: wp_finger_contact
+  workpiece_contact_sensor_prefix: wp_contact
+
+geometry:
+  # Every workpiece USD is built along +Z with the origin AT the leading end face centre
+  # (generate_chuck_assets.py build_workpiece; asserted by verify_assets.py). So the "tip" -- the
+  # end that enters the chuck -- is the root frame itself and needs no offset.
+  tip_offset: [0.0, 0.0, 0.0]
+  tray_rim_height: 0.012        # tray.outer[2] -- a shallow lip; see assets.yaml for why
+  tray_floor_thickness: 0.005   # tray.floor -> cavity floor is this far above the tray root
+  chuck_face_height: 0.080      # chuck.body_height; the seating plane for the W-C flange
 
 cameras:
   # Side-cam focal length for THIS task only, applied through the environment's cfg callback.
@@ -23,40 +46,240 @@ cameras:
   # recording and re-verify if the layout moves.
   side_focal_length: 6.0
 
+  # WRIST CAMERA, user-tuned live in the sim UI 2026-08-26 (for the v2 lift data campaign).
+  # The UI shows the prim's USD/OpenGL local pose; the offset below is CONVERTED to the ROS
+  # convention the embodiment's OffsetCfg uses (q_ros = q_gl x q_x180). Verified by render.
+  # UI raw 2nd tune: pos (0.1063, -0.01003, -0.01277), quat xyzw (0.6987, 0.69773, 0.11179, 0.11194). Focal 3.5 chosen from sweep.
+  wrist_offset:
+    pos: [0.1063, -0.01003, -0.01277]
+    rot_wxyz_ros: [-0.6987, 0.11194, 0.11179, -0.69773]
+  # Focal for the wrist cam (BDASH_WRIST_FOCAL env var overrides for sweeps; this value is what
+  # bakes into recordings). 2.8 is the pre-sweep value; updated after the user picks from stills.
+  wrist_focal_length: 3.5
+
+  # ======================================================================================
+  # EXTERNAL CAMERA PLACEMENT, solved 2026-08-16 by scripts/bdash/solve_layout.py alongside the
+  # layout. Poses are given as eye + look_at and the orientation quaternion is DERIVED at build
+  # time (bdash_chuck_load_environment._look_at_quat), so moving the tray cannot leave a camera
+  # pointing at where it used to be.
+  #
+  # Why not the embodiment default. The stock left/right cams sit near the workspace centre, which
+  # after this layout puts them almost straight down over the tray -- and an overhead view is the
+  # one view the arm reliably ruins, because the arm approaches every grasp from directly above.
+  # The audit criterion "target visible during approach >= 95%" is precisely the test an overhead
+  # camera fails. Both cams are therefore placed BESIDE the tray, on the axis orthogonal to the
+  # arm's radial approach, looking down at 52 deg: the arm then crosses the frame from the side
+  # instead of sitting between the lens and the part.
+  #
+  # Both are on the -y side. That is the half of the table with nothing in it -- tray, chuck,
+  # touch-off and V-block all sit between bearings +12 and +112 deg -- so neither camera has a
+  # fixture or the arm's chuck-side work in its background.
+  #
+  # AZIMUTH IS MEASURED, NOT REASONED. The first placement put the primary camera exactly
+  # ORTHOGONAL to the arm's approach (azimuth -78 deg from the tray), which is the intuitive answer
+  # and is WRONG: audit_camera_visibility.py scored it 79.0% useful visibility, visible at the
+  # grasp in only 7 of 10 episodes. The occluder is not the robot's base column, it is the FOREARM,
+  # and the perpendicular station sits inside its swing. Swinging round to -38 deg -- part-way
+  # toward looking back ALONG the approach, so the arm is behind the part rather than over it --
+  # measured 99.8%. Both cameras are now inside that verified band (-38 and -18 deg), audited at
+  # 99.8% / 100.0% useful visibility with the target visible at the grasp in 12 of 12 episodes.
+  #
+  # These bake into every recorded demo. Re-audit with scripts/bdash/audit_camera_visibility.py
+  # after ANY layout change, and treat a change after recording starts as a re-record.
+  # CHANGED BY HAND 2026-08-18: right_cam = straight down over the tray, left_cam = an oblique
+  # overhead of the whole cell. This REPLACES the pair that the 2026-08-16 audit measured at
+  # 99.8% / 100.0% useful visibility, so those numbers no longer describe these cameras.
+  #
+  # What is known, and what is not. The audit DID measure that a station exactly orthogonal to the
+  # arm's approach scores 79.0% -- the forearm sweeps through it -- and that swinging 40 deg round
+  # toward looking back along the approach gives 99.8%. It has NEVER validly measured a top-down
+  # view: the early runs that appeared to pass one were made with a broken instrument (the camera
+  # sensors were not being refreshed, so every frame was the reset render). So the top-down camera
+  # below is UNMEASURED, not known-good, and the arm does approach every grasp from directly above
+  # it. Re-run scripts/bdash/audit_camera_visibility.py before recording anything from these.
+  # NAMED FOR WHAT THEY SEE. The underlying embodiment fields are still `left_cam` / `right_cam`
+  # (FrankaCameraCfg, shared with the frozen peg pipeline, so renaming them there would change that
+  # pipeline's observation keys); these names are the task-level ones and are what the configs, the
+  # audit and the LeRobot conversion use.
+  #
+  # POSES ARE GIVEN, NOT DERIVED. `rot` is an explicit quaternion (w, x, y, z) in the USD/OpenGL
+  # convention -- the camera looks along its own -Z. Verified: top_cam's ray meets the bench at
+  # (0.390, 0.000) and overview_cam's at (0.483, 0.100), which is the tray. When `rot` is present it
+  # is used verbatim and `look_at` is ignored, because a hand-framed camera is a decision, not
+  # something to re-derive.
+  top_cam:                       # -> right_cam. Straight down over the workspace, 1.7 m up.
+    eye: [0.39, 0.0, 1.7]
+    rot: [0.70711, 0.0, 0.0, -0.70711]
+  overview_cam:                  # -> left_cam. Oblique overview from the robot's left, 0.9 m up.
+    eye: [0.92, 1.1, 0.9]
+    rot: [0.18086, 0.08925, 0.41695, 0.88627]
+
 scene:
-  # Franka base is at the origin; the table top is z = 0.
-  table_pose: [0.55, 0.0, 0.0]
+  # ======================================================================================
+  # LAYOUT, re-solved 2026-08-16 by scripts/bdash/solve_layout.py. Nothing below is a chosen
+  # coordinate: the solver searches bearing/radius/yaw against the requirement set and reports the
+  # slack on every constraint. Re-run it (with the measured table bounds) rather than nudging a
+  # number here -- the requirements, not these values, are the specification.
+  #
+  #   1 REACH      every task point in a horizontal annulus 0.35-0.60 m from the base
+  #   2 SEPARATION tray and chuck >= 90 deg apart in bearing about the base
+  #   3 FOOTPRINT  no overlaps, everything inside the table's measured collision footprint
+  #   4 CAMERA     look-down 50-55 deg from beside the tray, base not in the sight line
+  #
+  # Why the layout moved at all: the previous one put the tray's far corner 0.632 m from the base
+  # and its near corner 0.332 m -- outside the band at BOTH ends -- with tray and chuck only 37.8
+  # deg apart in bearing. At that separation the arm is over the tray for most of the episode, so
+  # the external camera loses the target exactly when the grasp happens.
+  # ======================================================================================
+  # Franka base is at the origin; the table top is z = 0. MEASURED collision footprint of the
+  # table prop (probe_scene_extents.py): x [-0.246, 1.034], y [-0.455, 0.455], top z -0.003. The
+  # visual mesh is much larger (y to 1.20, z to 0.715) and supports nothing -- a rigid body placed
+  # on the visual-only part simply falls.
+  # z is +0.003, not 0. MEASURED, the prop's collision top sits 3 mm BELOW its pose origin, so at
+  # z=0 the table top was at -0.003 and every fixture spawned at z=0 -- tray, V-block, touch-off --
+  # fell 3 mm at each reset. The tray landing shook the workpieces standing in it: measured drift
+  # over the 10-step settle ran to 16.6 mm with parts still moving at 0.117 m/s when the recorder
+  # starts capturing. Raising the table by exactly the measured gap puts its top at z=0, which is
+  # what every other z in this file already assumes.
+  # The stock table is now only the VISUAL BASE. The work surface is the generated
+  # `bdash_workbench` (assets.yaml), 1.5 x 1.5 m with its top face at z = 0; the environment drops
+  # this table by the slab thickness so the two do not fight over the same z. The stock table's
+  # 0.91 m width in y is what the whole 2026-08-16 layout was bent around.
+  table_pose: [0.55, 0.0, 0.003]
   ground_plane_z: -1.05
 
-  # Chuck: to the robot's right. Bore axis is vertical (+Z), face at z = chuck body_height.
-  chuck_pose: [0.52, -0.16, 0.0]
+  # Chuck: behind the robot's left shoulder. Bore axis is vertical (+Z), face at z = body_height.
+  # Bearing +112 deg, radius 0.380. It is this far round because the table is only 0.91 m wide in
+  # y: a chuck nearer +90 deg has to come in to r <= 0.355 to stay on the table, which puts it on
+  # the inner reach limit with no margin.
+  # SET BY HAND 2026-08-18 (was the solver's [0.1831, -0.3443]). Bearing -41.2 deg, radius 0.532 m.
+  # Reach, bench footprint and fixture clearances all pass (159 mm to touch-off, 157 mm to the
+  # V-block). The one requirement it misses is bearing separation: 81.2 deg against the >= 90 deg
+  # rule, so the arm is over the tray for slightly more of the chuck-side work than the rule intends.
+  # Recorded rather than silently accepted -- re-run solve_layout.py if the separation matters more
+  # than this exact position.
+  chuck_pose: [0.4000, -0.3500, 0.0]
 
-  # Tray: to the robot's left, workpieces scattered inside at random pose.
-  tray_pose: [0.45, 0.17, 0.0]
+  # Tray: in front and slightly left, bearing +12 deg, radius 0.470.
+  tray_pose: [0.4400, 0.4000, 0.0]
+  # YAW IS LOAD-BEARING, not cosmetic. The tray is 300 x 200 mm, so with its long axis radial the
+  # grasp region spans 260 mm radially against a 250 mm annulus -- infeasible at every bearing and
+  # radius, which is why the old layout could not satisfy requirement 1. Turned tangential the
+  # radial span is 160 mm. 100 deg puts the long axis across the +12 deg bearing.
+  # Consumed by bdash_chuck_randomization.tray_frame(); both the initial spawn and the per-reset
+  # scatter go through it, and both yaw the resting QUATERNION as well as the position.
+  # 90 deg = the tray's long axis along world +Y, i.e. SQUARE to the world rather than skewed.
+  # It cannot be 0: that puts the 300 mm long axis radial, so the grasp region spans 260 mm against
+  # a 250 mm reach annulus and no position works. 90 deg puts the short side radial (grasp reach
+  # 0.390-0.565 m at x=0.47) and is the only axis-aligned orientation that fits.
+  tray_yaw_deg: 90.0
 
-  # Fixtures, kept inboard so they stay clear of both the tray and the chuck swing.
-  vblock_pose: [0.31, -0.06, 0.0]
-  touchoff_pose: [0.31, 0.09, 0.0]
+  # Fixtures, in the bearing wedge between the tray and the chuck.
+  # These footprints MUST NOT overlap the tray: a fixture reaching into it means workpieces get
+  # spawned inside a kinematic body, which PhysX then ejects at up to max_depenetration_velocity
+  # (1 m/s). touchoff was once at y = 0.09, overlapping the tray corner by 40 x 50 mm and throwing
+  # parts ~50 mm during the first few steps of every episode that used that corner.
+  # check_chuck_scene.py asserts this, and now does it against the ROTATED tray footprint.
+  # §4-2 set-down point for the re-erect leg: where a turned-upright part is stood before it is
+  # picked again. Bare bench, no fixture -- the part stands on its own leading face, whose tipping
+  # angle is 12.6-15.5 deg across the three variants (base radius over centre-of-mass height), the
+  # same margin the tray spawn already holds at.
+  #
+  # Chosen by the layout rule, not by eye: radius 0.500 m sits mid-band in the 0.35-0.60 m reach
+  # annulus, and the nearest fixture is the chuck at 0.364 m, so the hand has clearance on every
+  # side. Pinned by tests/test_bdash_scene_layout.py.
+  reerect_pose: [0.5000, 0.0000, 0.0]
 
   # Arm start: hovering straight down over the tray centre. Solved the same way as the bdash
   # start pose -- applied through the embodiment's init_franka_arm_pose reset EVENT, because
   # init_state.joint_pos is a no-op that the event overwrites every reset.
-  initial_joint_pose: [0.0, -0.0765, 0.0, -2.3076, 0.0, 2.2311, 0.785, 0.04, 0.04]
+  # The embodiment DEFAULT pose, lowered. Joint 1 is untouched, so the arm still points where the
+  # default points; the elbow (4) opens, the wrist (6) counter-rotates to keep the tool level, and
+  # the shoulder (2) takes the last stretch down.
+  #
+  # MEASURED, not guessed. The default sits at TCP z 0.839 -- half way up to the overhead camera at
+  # z 1.7, so it covers much of that frame. Sweeping down:
+  #     default              TCP z 0.839   joint margin 0.802 rad
+  #     j4-1.20                    0.526                0.694
+  #     j4-1.70                    0.333                0.194
+  #     j4-1.85                    0.279                0.044   <- joint 4 is at its limit
+  #     j4-1.70 + j2+0.30          0.224                0.194   <- chosen
+  #     j4-1.70 + j2+0.70          0.095                0.194
+  #
+  # -1.85 reaches the target height on the elbow alone but leaves only 0.044 rad to the joint-4
+  # limit (-3.072), which a reset perturbation can cross. Taking the last 55 mm on the SHOULDER
+  # instead gets lower still (0.224) and keeps 0.194 rad of margin, so the pose is not sitting on a
+  # limit at the start of every episode.
+  initial_joint_pose: [0.0, -0.485, -0.1107, -2.8775, 0.0, 2.485, 0.785, 0.04, 0.04]
 
 # --------------------------------------------------------------------------------------
-# Tray spawning. `pose_range` is applied per workpiece inside the tray footprint.
-# `side_lying_frac` is the fraction spawned on their side rather than upright -- these are the
-# ones that physically cannot enter a vertical chuck and must be routed via the V-block.
+# Tray spawning. Poses are sampled by bdash_chuck_randomization.sample_tray_layout, which
+# rejection-samples yaw + position and rejects any layout where two workpiece CAPSULES come
+# closer than `min_clearance`. It does NOT use Isaac Lab's sample_object_poses: that samples
+# roll/pitch/yaw independently (so it cannot produce a bimodal upright/side-lying split),
+# checks only centre-to-centre distance (useless for a 100 mm rod), and -- worst -- accepts
+# the last sample UNCONDITIONALLY on its final try, which silently returns interpenetrating
+# poses and blows up PhysX at reset.
+#
+# Poses are placed at the ANALYTIC resting height, not dropped: Isaac Lab runs the reset event
+# manager and then computes observations with no physics steps in between, so a drop height
+# would put falling parts in the first recorded frames. Note that the stepped variants come to
+# rest TILTED (W-B 3.3 deg, W-C 7.9 deg) because their centre of mass sits ahead of the fat
+# section, so they pivot down onto the leading end -- the sampler solves for that per variant.
+#
+# `side_lying_frac` is the fraction laid on their side. Those are the parts that physically
+# cannot enter a vertical chuck and must be routed via the V-block, which is what makes the
+# three-way gate a mechanism requirement rather than a demo flourish.
 # --------------------------------------------------------------------------------------
 tray_spawn:
-  count_per_variant: 2
-  min_separation: 0.055         # > max workpiece diameter (0.045) so they never spawn interpenetrating
-  pose_range:
-    x: [-0.09, 0.09]            # relative to tray_pose, inside the 0.24 x 0.16 cavity
-    y: [-0.05, 0.05]
-    yaw: [-3.141592653589793, 3.141592653589793]
-  side_lying_frac: 0.4
-  drop_height: 0.045            # spawn just above the tray floor and let them settle
+  # 3 parts (one per variant), revised 2026-08-15 from 6. The original "keep six" ruling rested on
+  # multi-variant presence and a real selection task; §0-3 continuous dimensions now carry both --
+  # one of each family still differs in size every episode, so "the stepped one" / "the fat flanged
+  # one" remains a genuine language choice. Against that, six parts buys physical edge cases
+  # (pile-up contacts, spawn failures, jams) that cost runs with 12 days left.
+  # 6 is kept here as a comment, not deleted: E1's crowding slice re-runs this scene at 2.
+  count_per_variant: 1          # was 2 (=6 parts); E1 crowding slice uses 2
+  # 2026-08-25: 0.4 -> 0.0 (user decision). The S3 kill-switch scoped the VLA to upright targets,
+  # so the DEMO/EVAL scene now spawns every part upright -- a side-lying part whose colour matches
+  # the instruction would ask the model for a skill it was never taught. E1 (fed6f592c9dd) and the
+  # full247/lift247 recordings ran at 0.4 with the lying parts as background; results carry their
+  # own fingerprints. The V-block routing argument above stays true for the FUTURE side-lying
+  # extension -- it is out of the RSJ scope, not disproved.
+  side_lying_frac: 0.0          # drawn as an exact COUNT per episode, not a per-part coin flip
+  upright_tilt_deg: 0.0         # Upright parts stand FLAT on their leading face, not tilted.
+                                # A tilt puts a 90-100 mm rod on the sharp rim EDGE of that face with
+                                # its centre of mass offset, against a tipping angle of only 12.6 deg
+                                # (W-B). Measured at 3 deg, parts toppled during the settle window and
+                                # went sliding at over 2 m/s, taking neighbours with them. A flat face
+                                # is a full-area contact and is stable. Nothing is lost: the parts are
+                                # bodies of revolution, so an upright one has no pose diversity to add
+                                # beyond the tilt itself.
+  min_clearance: 0.004          # capsule-surface gap between any two workpiece BODIES
+  # ...but body clearance is not enough on its own, because the jaws are far wider than the parts.
+  # The binary gripper descends fully open, sweeping a corridor ~+-50 mm along its closing direction
+  # through the grasp station. Measured without this check, 79% of grasp stations had a neighbour
+  # inside that sweep: the gripper propped itself open on the neighbour (44.5 mm between jaws while
+  # squeezing a Ø25 shaft at 89 N) and the lift then failed. Enforcing a clear corridor takes that
+  # to 0%. It is a thin corridor rather than a 100 mm-radius disc because the closing direction is
+  # known per pose class -- six parts each needing a clear disc simply do not fit in this tray.
+  jaw_half_span: 0.050          # open-jaw reach either side of the TCP
+  jaw_half_width: 0.012         # finger half-width across the corridor (mesh x half-extent + margin)
+  wall_inset_body: 0.003        # the capsule must sit this far inside the tray cavity
+  grasp_wall_margin: 0.015      # keeps the grasp station off the very edge, for IK reach and so
+                                # the part stays fully framed. It does NOT have to clear the open
+                                # fingers: the binary Franka gripper spans ~50 mm either side of
+                                # the TCP, but with a 12 mm lip the fingertip (~16.5 mm on a
+                                # side-lying Ø25 shaft) passes above the rim entirely. At the old
+                                # 30 mm rim this had to be 0.050, which squeezed all six grasp
+                                # points into a 90 mm band -- ~55% packing, i.e. unplaceable.
+  place_epsilon: 0.0002         # gap left above the analytic resting height. MUST stay at the
+                                # collision contact_offset (assets.yaml, 0.2 mm) -- not larger.
+                                # At 1 mm the part free-falls through its own contact band inside a
+                                # single 8.3 ms physics step, and PhysX then resolves the resulting
+                                # penetration at up to max_depenetration_velocity (1 m/s). Parts were
+                                # popping at 0.4 m/s and sliding into each other during the first few
+                                # steps of the episode; at contact_offset there is no drop at all.
+  max_tries: 400                # per part; raises rather than accepting an overlap
 
 # --------------------------------------------------------------------------------------
 # Predicates. Provisional numbers -- the R(g) sweep replaces them with measured values, and the
@@ -69,17 +292,78 @@ grasped:
 
 lifted:
   height: 0.060                 # above the tray rim; the VLA's episode ends here
+  speed_max: 0.08               # only cut once the lift is steady (mirrors the peg handoff gate)
+
+# Which workpiece the episode is about. Latched at reset onto env.bdash_target_idx so the
+# predicates, the teacher, the recorder and the logger all agree on one part.
+target:
+  # uniform | side_lying_biased | upright_only
+  # `upright_only` is set by the environment for --task full and is TEMPORARY: a side-lying part
+  # cannot enter a vertical bore until the V-block re-erect (spec §4-2) exists.
+  #
+  # STRATIFIED as of 2026-08-16, from measurement rather than preference. With three parts and
+  # `side_lying_frac` 0.4 the tray holds exactly one side-lying part, so `uniform` should draw it
+  # a third of the time -- but measured over 30 episodes it was the target in only 2 (6.7%). The
+  # §0-10 hand-clearance filter is what removes the rest: a side-lying part sprawls across the tray
+  # and is far likelier to have a neighbour in the hand's descent envelope, so it is dropped from
+  # the eligible set. A pilot at that rate would carry ~17 side-lying demos in 250, which cannot
+  # teach the pose class. `side_lying_biased` draws one half the time when one is available.
+  # The achieved rate is reported per run from the recorder sidecar -- it is not assumed.
+  mode: side_lying_biased
+  # Probability of FORCING a side-lying target. NOT the achieved rate: on the other branch the
+  # §0-10 clearance filter still prefers upright parts. Measured on 3 parts -- `uniform` gave 6.7%
+  # side-lying targets, `side_lying_biased` at 0.5 gave 75%. 0.35 is set to land nearer an even
+  # split than either, since the tray's own composition is 1 side-lying part in 3 and a dataset
+  # three-quarters side-lying would under-train the upright grasp that the chuck stage needs.
+  # The achieved rate is REPORTED from the recorder sidecar every run; re-tune from that number.
+  side_lying_prob: 0.35
+
+  # Spec §0-10. The tray keeps SIX parts; only the episode's TARGET is guaranteed reachable by the
+  # open hand. This is the sampler's existing promise made good, not an easing of the task: the jaw
+  # corridor models the FINGERS (+-50 mm x 12 mm, purely 2D) and ignores both neighbour height and
+  # the hand body, so a straight-line descent lands the hand on top of any taller neighbour.
+  # Measured: `stall TCP z = neighbour_top - clear_z` reproduced the observed stalls to +-2 mm.
+  # Which part to work on, and in what order, is ER 2's responsibility at run time.
+  enforce_hand_clearance: true  # set false for the evaluation slice reported without the guarantee
+  hand:
+    # panda_hand collision mesh measured from franka_description/meshes/collision/hand.stl:
+    # z [-0.0259, +0.0660], y +-0.104, x +-0.0316, with the ee_frame TCP at hand-z 0.1034.
+    half_span: 0.100            # along the closing direction -- the hand's LONG axis
+    half_width: 0.032           # across it
+    clear_z: 0.0374             # hand underside above the TCP (0.0660 - 0.1034 = -0.0374)
+
+# Arm start jitter. This has to be a TASK event, applied after reset_scene_to_default: the
+# embodiment's own randomize_franka_joint_state merges first and is then overwritten back to
+# the defaults, which is why record_vla_demos.py --arm_init_std has never actually done anything.
+arm_start:
+  jitter_std: 0.03
 
 seated:
-  # Seated == the workpiece axis is aligned with the chuck axis AND it is deep enough. Angle
-  # tolerance is per-variant (assets.yaml); this is the fallback and the depth requirement.
+  # Seated == the workpiece axis is aligned with the chuck axis AND it is deep enough. The angle
+  # tolerance is per-variant (assets.yaml: tolerance.seat_angle_deg); this is the fallback.
+  # The angle is SIGNED against +Z, not an absolute value: an inverted part is never seated,
+  # because W-B's shoulder and W-C's flange only work one way up.
   seat_angle_deg: 2.0
   min_insert_depth: 0.030       # how far the leading Ø25 shaft must be below the chuck face
 
-protrusion:
-  # Distance from the chuck face to the variant's datum feature. Nominal is what the loading
-  # skill commands; the touch-off measurement is compared against it.
-  nominal_mm: 35.0
+chuck_load:
+  # Commanded insertion depth per variant. These MUST each exceed seated.min_insert_depth --
+  # the old flat protrusion.nominal_mm of 35 made W-B unsatisfiable, because its datum is the
+  # Ø32 shoulder at 60 mm, so 35 mm of protrusion implies only 25 mm of insertion.
+  # Nominal protrusion is then derived as (datum_offset - insert_depth), never restated:
+  #   W-A 90-50 = 40 mm   W-B 60-40 = 20 mm   W-C 72-72 = 0 mm (the flange hard-seats)
+  insert_depth_m:
+    # W-A: 0.050 -> 0.044 (2026-08-24), and this is §9's derived-window rule acting, not a retune.
+    # The work stopper is a 10 mm ring standing proud of the chuck face, and the FINGERS land on it:
+    # measured, the arm freezes at TCP z = 98.8 mm = ring top (90) + fingertip offset (8.9), which
+    # caps a held W-A at 46.1 mm of insertion. A commanded 50 therefore sat in a physically
+    # unreachable region -- "公差ではなく諦め" -- and every W-A load spent its episode pressing an
+    # immovable stop with the QC nominal 4 mm out of reach. 44 leaves 2 mm of clearance above the
+    # measured stop; the QC protrusion nominal follows automatically (datum - commanded depth).
+    W-A: 0.044
+    W-B: 0.040
+    W-C: 0.072
+  bore_clearance: 0.0075        # (bore Ø40 - shaft Ø25) / 2
 
 force:
   force_max: 60.0               # heavier stock than the bdash peg, so a higher jam threshold

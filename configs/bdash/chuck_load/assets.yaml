@@ -58,6 +58,15 @@ chuck:
                                 # and > W-B step Ø32 so the stepped shaft still passes through
   jaw_slot_clearance: 0.001     # per-side slack in the radial jaw slots
   mass: 8.0                     # heavy fixture; spawned kinematic so mass is nominal
+  # ワークストッパ: an annular locator standing in the bore mouth, a stock chuck accessory. It
+  # exists because W-C's Ø45 flange has nowhere else to seat that the fingers can reach -- a seat
+  # carried on the jaws raises the jaw top that blocks the fingers by exactly as much, verified
+  # numerically (fingertip 8.9-32.9 mm inside the jaw at the commanded grip). Spanning
+  # r [bore_r, outer_radius] it sits INSIDE the fingers, which clamp the flange OD at r 22.5 mm.
+  # Raises the seat 10 mm, so W-C's insertion depth measured from the chuck face is 72 - 10 = 62 mm.
+  work_stopper:
+    outer_radius: 0.0225        # = W-C flange radius; any larger and the fingers foul it
+    height: 0.010
 
 chuck_jaw:                      # 生爪: stepped gripping face, Ø25 low / Ø32 high.
                                 # Recessed flush into the chuck face so the top face stays a clean
@@ -73,17 +82,67 @@ chuck_jaw:                      # 生爪: stepped gripping face, Ø25 low / Ø32
 # --------------------------------------------------------------------------------------
 # Fixtures
 # --------------------------------------------------------------------------------------
+# GENERATED work surface, replacing the stock SeattleLabTable as the thing everything rests on.
+# The stock table's measured collision top is only 0.91 m wide in y (x [-0.246, 1.034],
+# y [-0.455, 0.455]) and that single number drove the whole 2026-08-16 layout: with every task point
+# required to sit 0.35-0.60 m from the base AND the tray >= 90 deg from the chuck in bearing, the
+# tray had to be yawed and the chuck pushed round to bearing +112 deg, behind the robot's shoulder.
+#
+# The two other stock options were measured and rejected: `packing_table` is a whole SCENE carrying
+# its own 5001 m ground plane (which collides with ours), and `maple_table_robolab` fails to load its
+# vMaterials MDL modules and renders broken.
+#
+# 1.5 x 1.5 centred at x=0.35 gives x [-0.40, 1.10], y [-0.75, 0.75]: enough to put the tray and the
+# chuck on opposite sides of the front arc at a comfortable radius, with ~0.19 m of margin beyond the
+# furthest footprint corner. Top face at z = 0, because every other z in these configs (tray floor,
+# chuck face, grasp heights) is already measured from the work surface.
+workbench:
+  size: [1.500, 1.500, 0.040]
+  centre: [0.350, 0.000]
+  mass: 40.0                    # spawned kinematic; mass is nominal
+
 tray:                           # coarse open tray, no dividers
-  outer: [0.300, 0.200, 0.030]
+  # A SHALLOW lip (7 mm above the floor), not a deep bin, and the height is load-bearing.
+  # The Franka gripper is binary -- it can only descend fully open, reaching ~50 mm either side
+  # of the TCP -- so to pick a part lying 17.5 mm up in a 30 mm-walled tray the open fingers had
+  # to sit 13 mm inside the wall span, which confined every grasp to a 90 mm-wide central band of
+  # a 190 mm cavity. Six parts in that band is ~55% packing density, i.e. right at the random
+  # sequential jamming limit, and the layout sampler could not place them.
+  # At 12 mm the fingertip (~16.5 mm for a side-lying Ø25 shaft) clears the rim outright and the
+  # whole cavity becomes usable. A 7 mm lip still catches a Ø25 cylinder below its equator.
+  outer: [0.300, 0.200, 0.012]
   wall: 0.005
   floor: 0.005
   mass: 0.5
+
+# §4-2 仮置き台: where a turned-up part is stood before it is picked again.
+#
+# It exists because the arm CANNOT set the part down on the bare bench. Measured
+# (scripts/bdash/probe_reerect_reach.py): with the tool horizontal -- which is what holding a
+# VERTICAL part requires -- the TCP stops 13.9-16.6 mm above its commanded height at every wrist
+# azimuth and every grasp angle tried, while the joint margin stays healthy (0.24-0.62 rad) and the
+# orientation converges to under 2.3 deg. A residual that is the same size regardless of the
+# kinematics is a PHYSICAL floor, not a reach limit: the hand is resting on the bench. Releasing
+# anyway would drop the part ~18 mm onto its end face, which is not a placement.
+#
+# 40 mm clears that floor and matches the other fixtures, so the cell still reads as one design.
+# 100 mm square leaves a Ø45 flange 27 mm of margin on every side.
+reerect_pad: {size: [0.100, 0.100, 0.040], mass: 1.5}
 
 touchoff_block:                 # datum block: top face + two orthogonal side faces
   size: [0.060, 0.060, 0.040]
   mass: 1.0
 
-vblock:                         # 90 deg V-groove, axis along X; re-erects a side-lying workpiece
+vblock:                         # 90 deg V-groove, axis along X. FIXTURE ONLY -- no skill uses it.
+  # REJECTED as the §4-2 datum (2026-08-19). The groove would fix a cylinder's axis by constraint
+  # rather than by measurement, which is exactly what §0-5 asks of a runtime skill -- but the part
+  # cannot then be GRIPPED, because its equator never clears the block's top face at Ø25 (-2.3 mm
+  # at 20 mm depth, and shallower grooves only move the larger variants onto the groove EDGES,
+  # where it centres nothing). One groove cannot both hold and release three diameters.
+  #
+  # Replaced by a check that needs no jig: stand the part on the 仮置き台, and read the gripper
+  # OPENING at the axial re-grip. A flipped W-B reads 25 mm where 32 is expected and a flipped W-C
+  # reads 25 where 45 is expected; W-A has no step to read and is symmetric, so it does not care.
   size: [0.080, 0.060, 0.040]
   groove_angle_deg: 90.0
   groove_depth: 0.020
@@ -98,9 +157,23 @@ collision:
   workpiece_approximation: convexDecomposition   # stacked cylinders = few convex parts
   chuck_body_approximation: sdf                  # a through-bore cannot be a convex hull
   jaw_approximation: convexDecomposition         # stepped block = 2 convex parts
-  tray_approximation: convexDecomposition        # floor + 4 walls
+  # NOT convexDecomposition. A tray is a cavity, and VHACD cannot represent one: measured by
+  # raycasting the same tray.stl cooked four ways, the cavity floor top comes out at
+  #     convexDecomposition 9.0909 mm | convexHull 12.0000 mm | triangle mesh 5.0000 | sdf 5.0000
+  # against a true 5.000 mm, and the shipped tray.usd reproduced the 9.0909 to four decimals. The
+  # sampler places parts against the CONFIG floor (bdash_chuck_randomization.py:479, 447), so every
+  # workpiece spawned 3.891 mm inside the cooked floor and PhysX cleared that overlap in a single
+  # substep -- at up to max_depenetration_velocity. Measured cost with zero arm action: 39% of
+  # upright parts toppled, 25 of them within the first env step; spawning above the cooked floor
+  # instead took that to 14% with the step-0 population entirely gone (25 -> 0). Since the toppled
+  # ones lift at 67% against 98.9% standing, this was the whole GATE-1 upright shortfall.
+  # A triangle mesh would also be exact and cheaper, but the tray carries RigidBodyPropertiesCfg
+  # (generate_chuck_assets.py:266) and PhysX does not allow triangle-mesh colliders on dynamic
+  # bodies -- so sdf, the same choice the chuck body already makes for the same reason.
+  tray_approximation: sdf
   vblock_approximation: convexDecomposition      # groove splits it into 2 convex halves
   block_approximation: convexHull                # plain box
+  workbench_approximation: convexHull            # a slab IS convex, so the hull is exact and cheap
 
 mesh:
   circle_sections: 256          # matches bdash; fine tessellation for clean SDF normals

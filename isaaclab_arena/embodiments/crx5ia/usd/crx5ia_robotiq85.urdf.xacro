@@ -1,0 +1,34 @@
+<?xml version="1.0" ?>
+<!--
+  CRX5iA arm + Robotiq 2F-85 gripper combined for Isaac Sim USD conversion.
+  The gripper is attached to the fanuc_flange link of the CRX5iA arm.
+-->
+<robot name="crx5ia_robotiq85" xmlns:xacro="http://wiki.ros.org/xacro">
+
+  <!-- CRX5iA arm macro -->
+  <xacro:include filename="$(find fanuc_crx_description)/urdf/crx5ia_urdf_macro.xacro"/>
+
+  <!-- Robotiq 2F-85 gripper macro -->
+  <xacro:include filename="$(find robotiq_description)/urdf/robotiq_2f_85_macro.urdf.xacro"/>
+
+  <!-- World link (fixed base) -->
+  <link name="world"/>
+
+  <!-- Dummy tool_center_point link (required by crx5ia macro as 'child') -->
+  <link name="tool_center_point"/>
+
+  <!-- Instantiate the CRX5iA arm attached to world -->
+  <xacro:crx5ia parent="world" child="tool_center_point">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:crx5ia>
+
+  <!-- Attach Robotiq 2F-85 gripper to the fanuc_flange of the arm -->
+  <xacro:robotiq_gripper
+    name="RobotiqGripper"
+    prefix=""
+    parent="fanuc_flange"
+    include_ros2_control="false">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:robotiq_gripper>
+
+</robot>

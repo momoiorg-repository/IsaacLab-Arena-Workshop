@@ -315,6 +315,7 @@ def convert_trajectory_to_df(
     episode_index: int,
     index_start: int,
     config: Gr00tDatasetConfig,
+    task_index: int | None = None,
 ) -> dict[str, Any]:
     """
     Convert a single trajectory from HDF5 to a pandas DataFrame.
@@ -446,11 +447,16 @@ def convert_trajectory_to_df(
     assert "annotation" in config.lerobot_keys
     annotation_keys = config.lerobot_keys["annotation"]
     # task selection
-    data[annotation_keys[0]] = np.ones(length, dtype=int) * config.task_index
+    # PER EPISODE when the caller supplies one. The chuck pick-place demos are labelled by the
+    # colour of the part being asked for -- "pick up the red workpiece" -- so a single index for the
+    # whole dataset would collapse four instructions into one and label three quarters of the demos
+    # with the wrong sentence.
+    episode_task = config.task_index if task_index is None else task_index
+    data[annotation_keys[0]] = np.ones(length, dtype=int) * episode_task
 
     # 3. Other data
     data["episode_index"] = np.ones(length, dtype=int) * episode_index
-    data["task_index"] = np.ones(length, dtype=int) * config.task_index
+    data["task_index"] = np.ones(length, dtype=int) * episode_task
     data["index"] = np.arange(length, dtype=int) + index_start
     data["frame_index"] = np.arange(length, dtype=int)
     # last frame is successful
@@ -501,8 +507,39 @@ def convert_hdf5_to_lerobot(config: Gr00tDatasetConfig):
     lerobot_meta_dir = config.lerobot_data_dir / "meta"
     lerobot_meta_dir.mkdir(parents=True, exist_ok=True)
 
-    tasks = {}
-    tasks.update({config.task_index: f"{config.language_instruction}"})
+    # THE TASK TABLE. One entry per DISTINCT instruction, not one for the dataset.
+    #
+    # `language_instruction: PER_EPISODE` means the recorder chose a sentence per demo from the
+    # material its target was drawn with, and wrote it to the attempts sidecar. Reading it back is
+    # not optional: the recorder's own `--language` is a placeholder in that mode, and baking it in
+    # would label every demo "pick up a workpiece and lift it clear" -- a sentence that names no
+    # part and does not describe what the demo does.
+    tasks: dict[int, str] = {}
+    per_episode = str(getattr(config, "language_instruction", "")) == "PER_EPISODE"
+    if per_episode:
+        sidecar = Path(config.hdf5_file_path).with_name(Path(config.hdf5_file_path).stem + "_attempts.jsonl")
+        if not sidecar.exists():
+            raise FileNotFoundError(
+                f"language_instruction is PER_EPISODE but {sidecar} is missing; the per-demo sentences "
+                "live there and cannot be recovered from the HDF5"
+            )
+        # Successful attempts only, in order -- they are what was exported, one per demo.
+        sentences = [json.loads(line).get("language") for line in sidecar.open()]
+        sentences = [t for t in sentences if t]
+        for text in sentences:
+            if text not in tasks.values():
+                tasks[len(tasks)] = text
+        lookup = {text: idx for idx, text in tasks.items()}
+        # `sentences` is in RECORDING order (demo_0, demo_1, ...), but the episode loop below walks
+        # h5py keys in ALPHABETICAL order (demo_0, demo_1, demo_10, demo_100, ...). Indexing the
+        # sentence list by loop position mislabels every demo whose alphabetical rank differs from
+        # its recording rank -- measured on chuck_full250: 3 of 4 episodes carried the wrong colour
+        # word. The sentence for a trajectory is found by the NUMBER in its name, never by loop
+        # position.
+        sentence_for_demo = {i: t for i, t in enumerate(sentences)}
+        print(f"[convert] per-episode instructions: {len(sentences)} demos, {len(tasks)} distinct")
+    else:
+        tasks.update({config.task_index: f"{config.language_instruction}"})
 
     # 2. Generate data/
     total_length = 0
@@ -518,7 +555,11 @@ def convert_hdf5_to_lerobot(config: Gr00tDatasetConfig):
             trajectory = hdf5_data[trajectory_id]
 
             df_ret_dict = convert_trajectory_to_df(
-                trajectory=trajectory, episode_index=episode_index, index_start=total_length, config=config
+                trajectory=trajectory,
+                episode_index=episode_index,
+                index_start=total_length,
+                config=config,
+                task_index=(lookup[sentence_for_demo[int(trajectory_id.rsplit("_", 1)[1])]] if per_episode else None),
             )
         except Exception as e:
             import traceback

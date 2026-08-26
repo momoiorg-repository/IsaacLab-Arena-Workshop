@@ -1,6 +1,11 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 from gr00t.configs.data.embodiment_configs import register_modality_config
 from gr00t.data.embodiment_tags import EmbodimentTag
-from gr00t.data.types import ModalityConfig, ActionConfig, ActionRepresentation, ActionType, ActionFormat
+from gr00t.data.types import ActionConfig, ActionFormat, ActionRepresentation, ActionType, ModalityConfig
 
 franka_config = {
     "video": ModalityConfig(
@@ -42,6 +47,6 @@ franka_config = {
     ),
 }
 
-# Register with NEW_EMBODIMENT tag as per guide, or we could define a custom one if allowed. 
+# Register with NEW_EMBODIMENT tag as per guide, or we could define a custom one if allowed.
 # The guide says "register_modality_config(so100_config, embodiment_tag=EmbodimentTag.NEW_EMBODIMENT)"
 register_modality_config(franka_config, embodiment_tag=EmbodimentTag.NEW_EMBODIMENT)

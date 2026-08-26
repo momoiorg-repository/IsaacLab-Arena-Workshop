@@ -45,7 +45,7 @@ parser.add_argument(
     type=str,
     nargs="*",
     default=None,
-    help="Subset to build: workpieces chuck jaw tray touchoff vblock (default: all).",
+    help="Subset to build: workpieces chuck jaw tray workbench reerect_pad (default: all).",
 )
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -70,7 +70,7 @@ def load_config(path: str) -> dict:
         raise FileNotFoundError(f"B-DASH asset config required but unreadable: {path}")
     with open(path) as f:
         cfg = yaml.safe_load(f) or {}
-    for key in ("workpieces", "chuck", "chuck_jaw", "tray", "touchoff_block", "vblock", "collision", "mesh"):
+    for key in ("workpieces", "chuck", "chuck_jaw", "tray", "reerect_pad", "collision", "mesh"):
         if key not in cfg:
             raise KeyError(f"missing required section {key!r} in {path}")
     return cfg
@@ -162,7 +162,29 @@ def build_chuck_body(c: dict, jaw: dict, sections: int) -> trimesh.Trimesh:
         slot.apply_transform(trimesh.transformations.rotation_matrix(k * 2.0 * np.pi / 3.0, [0, 0, 1]))
         tools.append(slot)
 
-    return trimesh.boolean.difference([body, trimesh.boolean.union(tools, engine="manifold")], engine="manifold")
+    cut = trimesh.boolean.difference([body, trimesh.boolean.union(tools, engine="manifold")], engine="manifold")
+
+    # WORK STOPPER (ワークストッパ): an annular locator standing inside the bore, a stock chuck
+    # accessory on a real machine and the only place a seat for the W-C flange can go.
+    #
+    # It has to be INSIDE the fingers, not under them. The flange seats at 72 mm of insertion, and
+    # the fingertip clears the chuck face only for a grip station beyond 80.9 mm on an 80 mm part --
+    # so a seat carried on the jaws is unreachable, because raising the seat raises the jaw top that
+    # obstructs the fingers by exactly as much. Verified numerically before this was built: at the
+    # commanded grip (upper third of the body) the fingertip sat 8.9-32.9 mm INSIDE the jaw.
+    #
+    # A ring spanning r [bore_r, flange_r] escapes that: the fingers clamp the flange OD at
+    # r = flange_r and stay outside it, so the seat can rise without the obstruction rising.
+    # At station 76 mm the fingertip clears the chuck face by +5.1 mm.
+    stopper = c.get("work_stopper")
+    if stopper:
+        outer = trimesh.creation.cylinder(radius=float(stopper["outer_radius"]), height=float(stopper["height"]))
+        outer.apply_translation([0.0, 0.0, height + float(stopper["height"]) / 2.0])
+        inner = trimesh.creation.cylinder(radius=bore_r, height=float(stopper["height"]) + 0.004)
+        inner.apply_translation([0.0, 0.0, height + float(stopper["height"]) / 2.0])
+        ring = trimesh.boolean.difference([outer, inner], engine="manifold")
+        cut = trimesh.boolean.union([cut, ring], engine="manifold")
+    return cut
 
 
 def build_chuck_jaw(j: dict) -> trimesh.Trimesh:
@@ -205,17 +227,50 @@ def build_tray(t: dict) -> trimesh.Trimesh:
     return trimesh.boolean.difference([outer, cavity], engine="manifold")
 
 
+def build_workbench(w: dict) -> trimesh.Trimesh:
+    """A plain rectangular worktop whose TOP FACE is at z = 0.
+
+    Generated rather than taken from the asset library because the work surface turned out to be
+    the binding constraint on the whole layout: every task point has to sit in a 0.35-0.60 m
+    annulus around the base AND the tray and chuck have to be >= 90 deg apart in bearing, and the
+    stock SeattleLabTable is only 0.91 m wide in y (measured collision footprint
+    x [-0.246, 1.034], y [-0.455, 0.455]). That forced the tray to be yawed and the chuck round to
+    bearing +112 deg, behind the robot's shoulder. A surface we choose the size of removes the
+    constraint instead of working around it.
+
+    z = 0 is the top, not the centre, because every other z in the configs (tray floor, chuck face,
+    grasp heights) is already measured from the work surface.
+    """
+    sx, sy, sz = w["size"]
+    return _box([sx, sy, sz], [0.0, 0.0, -sz / 2.0])
+
+
 def build_touchoff_block(b: dict) -> trimesh.Trimesh:
-    """Plain datum block. The touch-off skill probes its top face plus two orthogonal sides,
-    which is what turns a tip estimate into a measured ê (lateral XY + protrusion)."""
+    """Plain box with its origin on the bottom face: the 仮置き台.
+
+    It is BOTH the surface a turned-up part is stood on and the datum the touch-off probe reads,
+    because those want the same object -- a surveyed flat-topped box with square sides. They were
+    two separate fixtures until 2026-08-22, 0.7 m apart, and the probe paid a round trip for it.
+    """
     sx, sy, sz = b["size"]
     return _box([sx, sy, sz], [0.0, 0.0, sz / 2.0])
 
 
 def build_vblock(v: dict, sections: int) -> trimesh.Trimesh:
-    """Block with a 90 deg V-groove running along X. A side-lying cylinder dropped in the
-    groove self-centers and its axis becomes known, which is what makes the 仮置き route able
-    to re-erect stock the chuck cannot accept directly."""
+    """Block with a 90 deg V-groove running along X.
+
+    NOT USED BY ANY SKILL. The groove was the planned datum for the §4-2 re-erect -- it fixes a
+    cylinder's axis by constraint instead of by measurement, which is what a runtime skill needs
+    under §0-5. It was rejected on geometry: for the part to be GRIPPED while the groove still holds
+    it, its equator has to clear the block's top face, and at Ø25 that never happens (-2.3 mm at the
+    20 mm groove, and still short at 10 mm and 6 mm, by which depth the larger variants only touch
+    the groove's edges and it has stopped centring anything). See docs/progress/2026-08-19.md.
+
+    The block stays in the scene as a fixture. The route that replaced it needs no datum jig at
+    all: the part is stood on the 仮置き台 and a flipped one is caught by the gripper OPENING at the
+    axial re-grip, which reads 32 vs 25 mm on W-B and 45 vs 25 mm on W-C -- and W-A, the only
+    variant with no step to read, is symmetric and does not care which end goes down.
+    """
     sx, sy, sz = v["size"]
     depth = v["groove_depth"]
     half = np.deg2rad(v["groove_angle_deg"]) / 2.0
@@ -288,7 +343,11 @@ def main():
     out_dir = args_cli.out or cfg["output_dir"]
     sections = cfg["mesh"]["circle_sections"]
     coll = cfg["collision"]
-    want = set(args_cli.only) if args_cli.only else {"workpieces", "chuck", "jaw", "tray", "touchoff", "vblock"}
+    want = set(args_cli.only) if args_cli.only else {"workpieces", "chuck", "jaw", "tray", "workbench", "reerect_pad"}
+
+    if "workbench" in want and "workbench" in cfg:
+        bench = build_workbench(cfg["workbench"])
+        to_usd(bench, out_dir, "workbench", coll["workbench_approximation"], cfg["workbench"]["mass"], coll)
 
     if "workpieces" in want:
         chamfer = cfg["workpiece_common"]["end_chamfer"]
@@ -309,13 +368,11 @@ def main():
         tray = build_tray(cfg["tray"])
         to_usd(tray, out_dir, "tray", coll["tray_approximation"], cfg["tray"]["mass"], coll)
 
-    if "touchoff" in want:
-        blk = build_touchoff_block(cfg["touchoff_block"])
-        to_usd(blk, out_dir, "touchoff_block", coll["block_approximation"], cfg["touchoff_block"]["mass"], coll)
-
-    if "vblock" in want:
-        vb = build_vblock(cfg["vblock"], sections)
-        to_usd(vb, out_dir, "vblock", coll["vblock_approximation"], cfg["vblock"]["mass"], coll)
+    if "reerect_pad" in want and "reerect_pad" in cfg:
+        # Same shape as the datum block -- a box with its origin on the bottom face -- so it reuses
+        # that builder rather than adding a second way to say "box".
+        pad = build_touchoff_block(cfg["reerect_pad"])
+        to_usd(pad, out_dir, "reerect_pad", coll["block_approximation"], cfg["reerect_pad"]["mass"], coll)
 
     print("[gen] DONE")
 

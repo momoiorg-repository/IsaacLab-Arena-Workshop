@@ -23,6 +23,7 @@ BDASH_CONFIG_DIR = os.path.join(_REPO_ROOT, "configs", "bdash", "chuck_load")
 TASK_CFG_PATH = os.path.join(BDASH_CONFIG_DIR, "task.yaml")
 ASSETS_CFG_PATH = os.path.join(BDASH_CONFIG_DIR, "assets.yaml")
 CONTROLLERS_CFG_PATH = os.path.join(BDASH_CONFIG_DIR, "controllers.yaml")
+MATERIALS_CFG_PATH = os.path.join(BDASH_CONFIG_DIR, "materials.yaml")
 
 
 @lru_cache(maxsize=8)
@@ -37,6 +38,20 @@ def load_task_cfg(path: str | None = None) -> dict:
 def load_assets_cfg(path: str | None = None) -> dict:
     """Read ``configs/bdash/chuck_load/assets.yaml`` (workpiece/chuck geometry). Cached per-path."""
     cfg_path = path or ASSETS_CFG_PATH
+    with open(cfg_path) as f:
+        return yaml.safe_load(f)
+
+
+@lru_cache(maxsize=8)
+def load_materials_cfg(path: str | None = None) -> dict:
+    """Read ``configs/bdash/chuck_load/materials.yaml`` (appearance, lighting, render settings).
+
+    Separate from assets.yaml on purpose: assets.yaml is GEOMETRY and its numbers are what the
+    precision budget is measured against, while this file is what the cameras see. They freeze
+    together but they fail differently -- a wrong dimension breaks the physics, a wrong material
+    breaks the dataset.
+    """
+    cfg_path = path or MATERIALS_CFG_PATH
     with open(cfg_path) as f:
         return yaml.safe_load(f)
 

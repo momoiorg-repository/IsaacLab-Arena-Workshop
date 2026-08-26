@@ -1,0 +1,72 @@
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers (https://github.com/isaac-sim/IsaacLab-Arena/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Gr00tDatasetConfig for the B-DASH CHUCK-LOADING FULL slice: grasp, transport, insertion, and the
+# chuck taking the part -- cut on the env's own `loaded` terminal, upright targets, recorded at the
+# raised speeds (240 cm/s cruise / 5-9 cm/s insertion Z) chosen 2026-08-23 because demo speed is the
+# selling point. Instructions are per episode ("...load it into the chuck"), read from the attempts
+# sidecar. The place-slice config beside this one belongs to the ABANDONED pad recording whose
+# wrist camera went under the bench; kept only as provenance for that dataset. Recorded 2026-08-16 on the frozen
+# scene (see docs/progress/2026-08-16.md) with per-episode workpiece appearance randomisation.
+#
+# Swap `hdf5_name` for the pilot file to re-run the conversion end-to-end on 250 demos before
+# committing to the 2000-demo file; output goes to <data_root>/<hdf5 stem>/lerobot either way.
+#
+# fps IS MEASURED, NOT ASSUMED. The chuck env runs 120 Hz physics with decimation 2, which reads
+# like 60 Hz control, and the recorder adds its own `sim.step(render=True)` pump on top -- so the
+# frame period is not something to derive from the config. Measured from the recorded data itself
+# (dt = d(joint_pos)/joint_vel over 60 episodes): central difference 33.99 ms, forward difference
+# 32.60 ms, i.e. 4 physics steps = 33.33 ms = 30 Hz. That matches the value the peg configs already
+# use, so the two datasets share a time base.
+data_root: "/workspaces/isaaclab_arena/datasets/bdash"
+# PER_EPISODE: the sentence is chosen per demo from the colour of the part being asked for, and
+# lives in the attempts sidecar beside the HDF5. The converter reads it from there and builds one
+# task entry per DISTINCT instruction. A constant here would label three quarters of the demos with
+# the wrong colour -- and with a verb ("lift it clear") that does not describe what they do.
+language_instruction: "PER_EPISODE"
+task_index: 0
+hdf5_name: "chuck_full247.hdf5"
+
+state_name_sim: "joint_pos"
+action_name_sim: "processed_actions"
+pov_cam_name_sim: "wrist_cam_rgb"
+front_cam_name_sim: "left_cam_rgb"
+right_cam_name_sim: "right_cam_rgb"
+
+state_name_lerobot: "observation.state"
+action_name_lerobot: "action"
+video_name_lerobot: "observation.images.ego_view"
+front_video_name_lerobot: "observation.images.left_view"
+right_video_name_lerobot: "observation.images.right_view"
+task_description_lerobot: "annotation.human.task_description"
+
+chunks_size: 1000
+fps: 30
+
+data_path: "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet"
+video_path: "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4"
+
+modality_template_path: "isaaclab_arena_gr00t/embodiments/franka/modality.json"
+modality_fname: "modality.json"
+episodes_fname: "episodes.jsonl"
+tasks_fname: "tasks.jsonl"
+info_template_path: "isaaclab_arena_gr00t/embodiments/franka/info.json"
+info_fname: "info.json"
+
+policy_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/gr00t_9dof_joint_space.yaml"
+policy_action_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/gr00t_8dof_action_space.yaml"
+robot_type: "franka"
+
+action_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/8dof_action_space.yaml"
+state_joints_config_path: "isaaclab_arena_gr00t/embodiments/franka/9dof_joint_space.yaml"
+
+original_image_size: [256, 256, 3]
+target_image_size: [256, 256, 3]
+
+# NOT CARRIED INTO LEROBOT, and that is deliberate. The HDF5 also holds `axis_cond`, `appearance`
+# ([r, g, b, roughness, metallic] of the target) and `action_owner`. Which channel the policy is
+# conditioned on is a modelling decision that binds HERE, at conversion, not at recording -- so the
+# recording keeps them all and this file names only what the current model consumes. Adding one
+# later costs a re-conversion, never a re-record.

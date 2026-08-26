@@ -1,0 +1,14 @@
+#usda 1.0
+(
+    doc = "Overlay: applies PhysxArticulationAPI to the arm base_link so ROS2 PublishJointState can find the arm articulation"
+    subLayers = []
+)
+
+over "crx5ia"
+{
+    over "base_link" (
+        prepend apiSchemas = ["PhysxArticulationAPI"]
+    )
+    {
+    }
+}
