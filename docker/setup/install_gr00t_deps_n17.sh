@@ -111,6 +111,12 @@ $PYTHON_CMD -m pip install \
     timm==1.0.14 \
     tqdm==4.67.1 \
     transformers==4.57.3 \
+
+# bitsandbytes: required, not optional -- TUNE_VISUAL runs OOM with adamw_torch on A40-class
+# VRAM and must use OPTIM=adamw_bnb_8bit (measured on vdi00035-001/002).
+# accelerate>=1.4: transformers 4.57.3 calls Accelerator.unwrap_model(keep_torch_compile=...),
+# which 1.2.x does not have (TypeError measured on vdi00035-001).
+/isaac-sim/python.sh -m pip install bitsandbytes "accelerate>=1.4"
     diffusers==0.35.0 \
     wandb==0.18.0 \
     fastparquet==2024.11.0 \
