@@ -25,9 +25,10 @@ DOCKER_RUN_GROUP_NAME="${DOCKER_RUN_GROUP_NAME:-hostgroup}"
 groupadd --force --gid "$DOCKER_RUN_GROUP_ID" "$DOCKER_RUN_GROUP_NAME"
 
 # --create-home matters: nothing else makes /home/<user> (login.defs has no CREATE_HOME,
-# the Dockerfile creates none, and the deleted ubuntu user leaves only /home/ubuntu), so
-# the chown below died on every host whose username is not exactly "ubuntu" (measured on
-# vdi00035-001, user tutpoc1).
+# the Dockerfile creates none, and the deleted ubuntu user leaves only /home/ubuntu). The
+# run_docker.sh path happens to survive because its .bash_history/.cache bind mounts make
+# Docker auto-create the home first -- BARE `docker run` without those mounts dies at the
+# chown below (measured on vdi00035-001; correction by the same host's follow-up analysis).
 useradd --no-log-init \
         --create-home \
         --uid "$DOCKER_RUN_USER_ID" \
