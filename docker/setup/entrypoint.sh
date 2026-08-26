@@ -17,6 +17,11 @@ userdel "$DOCKER_RUN_USER_NAME" 2>/dev/null || true
 userdel ubuntu || true
 
 # Add the group of the user. User/group ID of the host user are set through env variables when calling docker run further down.
+# AD/LDAP-joined hosts hand us primary group names with spaces ("domain users"),
+# which groupadd rejects outright. Ownership is governed by the GID, so the NAME
+# is cosmetic -- sanitize it instead of failing (measured on vdi00035-001).
+DOCKER_RUN_GROUP_NAME="$(echo "$DOCKER_RUN_GROUP_NAME" | tr -c 'a-zA-Z0-9_-' '_' | sed 's/_*$//')"
+DOCKER_RUN_GROUP_NAME="${DOCKER_RUN_GROUP_NAME:-hostgroup}"
 groupadd --force --gid "$DOCKER_RUN_GROUP_ID" "$DOCKER_RUN_GROUP_NAME"
 
 useradd --no-log-init \
