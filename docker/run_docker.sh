@@ -109,9 +109,14 @@ if [ "$(docker images -q $DOCKER_IMAGE_NAME:$DOCKER_VERSION_TAG 2> /dev/null)" ]
     echo "Docker image $DOCKER_IMAGE_NAME:$DOCKER_VERSION_TAG already exists. Not rebuilding."
     echo "Use -r option to force the rebuild."
 else
+    # --progress needs the buildx CLI plugin; Ubuntu's docker.io package ships without it
+    # (measured on a fresh vdi node: `unknown flag: --progress` kills -g/-G). Daemon-side
+    # BuildKit still works, so only the flag is conditional.
+    PROGRESS_FLAG=""
+    docker buildx version >/dev/null 2>&1 && PROGRESS_FLAG="--progress=plain"
     docker build --pull \
         $NO_CACHE \
-        --progress=plain \
+        $PROGRESS_FLAG \
         --build-arg WORKDIR="${WORKDIR}" \
         --build-arg INSTALL_GROOT=$INSTALL_GROOT \
         --build-arg GROOT_DEPS_SCRIPT="${GROOT_DEPS_SCRIPT:-install_gr00t_deps.sh}" \

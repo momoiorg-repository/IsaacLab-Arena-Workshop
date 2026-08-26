@@ -26,6 +26,18 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."   # repo root (/workspaces/isaaclab_arena)
 export HDF5_USE_FILE_LOCKING="${HDF5_USE_FILE_LOCKING:-FALSE}"
 
+# ── gn17 runtime fixes (from the vdi00035-002 production runs) ───────────────
+# torch 2.7.0 (cu128) needs the pip-installed NVIDIA cu12 libs on the loader
+# path or `import torch` dies on libcusparseLt.so.0. Not persisted in the image.
+if ls -d /isaac-sim/kit/python/lib/python3.11/site-packages/nvidia/*/lib >/dev/null 2>&1; then
+  export LD_LIBRARY_PATH="$(ls -d /isaac-sim/kit/python/lib/python3.11/site-packages/nvidia/*/lib | tr '\n' ':')${LD_LIBRARY_PATH:-}"
+fi
+# Local N1.7 base checkpoint (what the chuck-full250/lift247 runs used) avoids a
+# gated HF download inside the container. Only a default -- env override wins.
+if [ -z "${BASE_MODEL_PATH:-}" ] && [ -d /workspaces/isaaclab_arena/models/GR00T-N1.7-3B-base ]; then
+  BASE_MODEL_PATH=/workspaces/isaaclab_arena/models/GR00T-N1.7-3B-base
+fi
+
 # ── Paths ───────────────────────────────────────────────────────────────────
 # Base checkpoint to start from. Default: official N1.7 base (HF, may require `huggingface-cli login`).
 # N1.7 uses the Cosmos-Reason2-2B (Qwen3-VL) backbone, bundled in the checkpoint.
@@ -47,6 +59,9 @@ SAVE_TOTAL_LIMIT="${SAVE_TOTAL_LIMIT:-5}"
 NUM_GPUS="${NUM_GPUS:-1}"
 DATALOADER_NUM_WORKERS="${DATALOADER_NUM_WORKERS:-2}"
 NUM_SHARDS_PER_EPOCH="${NUM_SHARDS_PER_EPOCH:-100000}"
+# adamw_torch fits the frozen-vision recipe in 42.3/46GB (measured, A40); TUNE_VISUAL=true
+# OOMs with it -- use OPTIM=adamw_bnb_8bit for visual-tuning runs (vdi00035-002 field data).
+OPTIM="${OPTIM:-adamw_torch}"
 USE_WANDB="${USE_WANDB:-false}"   # set "true" after `wandb login`
 
 # What to fine-tune (projector + diffusion head only; revisit for the N1.7 Qwen backbone).
@@ -88,6 +103,7 @@ exec /isaac-sim/python.sh isaaclab_arena_gr00t/scripts/launch_finetune.py \
   --num-gpus "$NUM_GPUS" \
   --dataloader-num-workers "$DATALOADER_NUM_WORKERS" \
   --num-shards-per-epoch "$NUM_SHARDS_PER_EPOCH" \
+  --optim "$OPTIM" \
   "$(bool_flag tune-llm "$TUNE_LLM")" \
   "$(bool_flag tune-visual "$TUNE_VISUAL")" \
   "$(bool_flag tune-projector "$TUNE_PROJECTOR")" \

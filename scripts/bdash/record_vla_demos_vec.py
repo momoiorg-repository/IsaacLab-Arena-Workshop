@@ -248,6 +248,11 @@ def main():
 
     jsonl.close()
     print(f"[vrec] DONE: {recorded} demos in {attempts} attempts -> {args_cli.dataset_file}", flush=True)
+    # HARD EXIT. simulation_app.close() hangs on this box (measured: the clean1 slice sat 2h+ in
+    # shutdown, starving the campaign chain). Every episode was already flushed by
+    # export_episodes(), so skipping the graceful close loses nothing -- os._exit bypasses the
+    # finally-block close on purpose.
+    os._exit(0)
 
 
 if __name__ == "__main__":
